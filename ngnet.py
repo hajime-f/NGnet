@@ -17,11 +17,14 @@ class NGnet:
     W = []      # Linear regression matrices in the units
     var = []
 
-    P_i = []         # Probability of i: P(i | theta)
-    P_x = []         # Probability of x: P(x | i, theta)
-    P_y = []         # Probability of y: P(y | x, i, theta)
+    P_i = []    # Probability of i: P(i | theta)
+    P_x = []    # Probability of x: P(x | i, theta)
+    P_y = []    # Probability of y: P(y | x, i, theta)
+    P_xyi = []  # Probability of xyi: P(x, y, i | theta)
+    
+    
     posterior_y = 0  # Probability of y: P(y | x, theta) that the output value becomes y
-    posterior_i = 0  # Probability of y: P(i | x, y_real, theta) that the output value becomes y
+    posterior_i = []  # Probability of y: P(i | x, y, theta) that the output value becomes y
     
     N  = 0      # The dimension of input data,
     D = 0       # The dimension of output data and
@@ -43,6 +46,12 @@ class NGnet:
 
         for i in range(M):            
             self.var.append(random.random())
+
+        P_i = [1/M] * M
+        P_x = [0.1] * M
+        P_y = [0.1] * M
+        P_xyi = [0.1] * M
+        posterior_i = [0.1] * M
         
         self.N = N
         self.D = D
@@ -124,7 +133,8 @@ class NGnet:
 
     def calc_recip_pi(self, val):
         return np.reciprocal(np.power(np.sqrt(2.0 * np.pi), val))
-    
+
+    # Probability of y: P(y | x, i, theta) is calculated according to equation (2.3c)
     def calc_P_y(self, x, y, i):
         
         diff = np.square(y - self.linear_regression(x, i))
@@ -133,11 +143,46 @@ class NGnet:
         pi = self.calc_recip_pi(self.D)
 
         return pi * sd * ep
+
+    
+    def calc_det(self, cov):
         
+        vals, vecs = np.linalg.eigh(cov)
+        det = 1.0
+        for v in vals:
+            det *= v
+        
+        return det
+    
+
+    # Probability of xyi: P(x, y, i | theta) is calculated according to equation (2.2)
+    def calc_P_xyi(self, x, y, i):
+
+        diff = diff = np.square(y - self.linear_regression(x, i))
+        maha = calc_maha(self, x, self.mu[i], self.Sigma[i])
+        ep = -0.5 * (maha + self.calc_recip_var(self.var[i], 2) * diff)
+        pi = self.calc_recip_pi(self.D + self.N)
+        sd = self.calc_recip_var(self.var[i], self.D)
+        invdet = np.reciprocal(sqrt(calc_det(self.Sigma[i])))
+
+        return (-1/self.M) * pi * sd * ep
     
         
-    def E_step(self, x, y_real):
+    def E_step(self, x, y):
+
+        s = 0
+        for i, p in enumerate(self.P_xyi):
+            self.P_xyi[i] = self.calc_P_xyi(x, y, i)
+            s += self.P_xyi[i]
+
+        for i, p in enumerate(self.P_xyi):
+            self.posterior_i[i] = self.P_xyi[i] / s
+
+        return self.posterior_i
+
+    def M_step(self, x, y):
         pass
+        
 
 if __name__ == '__main__':
 
