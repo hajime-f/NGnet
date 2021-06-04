@@ -24,7 +24,7 @@ class NGnet:
     
     
     posterior_y = 0  # Probability of y: P(y | x, theta) that the output value becomes y
-    posterior_i = []  # Probability of y: P(i | x, y, theta) that the output value becomes y
+    posterior_i = []  # Probability of y: P(i | x, y, theta) that the output value becomes y   
     
     N  = 0      # The dimension of input data,
     D = 0       # The dimension of output data and
@@ -180,8 +180,15 @@ class NGnet:
 
         return self.posterior_i
 
-    def M_step(self, x, y):
+    def M_step(self, x_list, y_list):
         pass
+
+
+    def offline_learning(self, x_list, y_list):
+        pass
+        
+            
+            
         
 
 if __name__ == '__main__':
