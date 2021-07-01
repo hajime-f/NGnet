@@ -46,8 +46,7 @@ class NGnet:
         self.M = M
 
         for i in range(M):
-            v = np.array([1.0] * D)
-            self.var.append(np.diag(v))
+            self.var.append(random.random())
         
 
     ### The functions written below are to calculate the output y given the input x
@@ -56,14 +55,13 @@ class NGnet:
     def get_output_y(self, x):
 
         # Initialization of the output vector y
-        y = np.array([0.0] * self.D)
+        y = np.array([0.0] * self.D).reshape(-1, 1)
 
-        # Calculation of Equation (2.1a) in the article
+        # Equation (2.1a)
         for i in range(self.M):
             N_i = self.evaluate_Normalized_Gaussian_value(x, i)  # N_i(x)
             Wx = self.linear_regression(x, i)  # W_i * x
-            
-            y += (N_i * Wx)[0:self.D, 0]
+            y += N_i * Wx
         
         return y
 
@@ -71,16 +69,39 @@ class NGnet:
     # This function calculates N_i(x).
     def evaluate_Normalized_Gaussian_value(self, x, i):
 
+        # Denominator of equation (2.1b)
         sum_g_j = 0
         for j in range(self.M):
-            sum_g_j += multivariate_normal.pdf(x, mean=self.mu[j].flatten(), cov=self.Sigma[j])
-        
-        g_i = multivariate_normal.pdf(x, mean=self.mu[i].flatten(), cov=self.Sigma[i])
+            sum_g_j += self.multinorm_pdf(x, self.mu[j], self.Sigma[j])
 
+        # Numerator of equation (2.1b)
+        g_i = self.multinorm_pdf(x, self.mu[i], self.Sigma[i])
+
+        # Equation (2.1b)
         N_i = g_i / sum_g_j
         
-        return N_i
+        return N_i        
+    
 
+    def multinorm_pdf(self, x, mean, cov):
+        
+        # "eigh" assumes the matrix is Hermitian.
+        vals, vecs = np.linalg.eigh(cov)
+        logdet = np.sum(np.log(vals))
+        valsinv = np.array([1./v for v in vals])
+        
+        # "vecs" is R times D while "vals" is a R-vector where R is the matrix rank.
+        # The asterisk performs element-wise multiplication.
+        U = vecs * np.sqrt(valsinv)
+        rank = len(vals)
+        dev = x - mean
+
+        # "maha" for "Mahalanobis distance".
+        maha = np.square(np.dot(dev.T, U)).sum()
+        log2pi = np.log(2 * np.pi)
+        
+        return np.exp(-0.5 * (rank * log2pi + maha + logdet))
+    
     
     # This function calculates W_i * x.
     def linear_regression(self, x, i):
@@ -126,16 +147,24 @@ class NGnet:
         P_i = 1 / self.M
 
         # Equation (2.3b)
-        P_x = multivariate_normal.pdf(x, mean=self.mu[i].flatten(), cov=self.Sigma[i])
+        P_x = self.multinorm_pdf(x, self.mu[i], self.Sigma[i])
 
         # Equation (2.3c)
         diff = y.reshape(-1, 1) - self.linear_regression(x, i)
-        P_y = multivariate_normal.pdf(x, mean=diff.flatten(), cov=self.var[i])
+        P_y = self.norm_pdf(diff, self.var[i])
 
         # Equation (2.2)
         P_xyi = P_i * P_x * P_y
         
         return P_xyi
+
+
+    def norm_pdf(self, diff, var):
+        
+        log_pdf1 = - self.D/2 * np.log(2 * np.pi)
+        log_pdf2 = - self.D * np.log(var)
+        log_pdf3 = - (1/(2 * np.power(var, 2))) * np.dot(diff.T, diff)
+        return np.exp(log_pdf1 + log_pdf2 + log_pdf3)
     
             
     # This function executes M-step written by equation (3.4)
@@ -143,10 +172,10 @@ class NGnet:
         
         self.offline_mu_update(x_list)
         self.offline_Sigma_update(x_list)
-        
+        self.offline_W_update(x_list, y_list)
     
 
-    # This function updates mu accrding to equation (3.4a)
+    # This function updates mu according to equation (3.4a)
     def offline_mu_update(self, x_list):
 
         for i, mu_i in enumerate(self.mu):
@@ -155,6 +184,7 @@ class NGnet:
             for t, x_t in enumerate(x_list):
                 sum_1 += self.posterior_i[t][i]
                 sum_mu += x_t.T * self.posterior_i[t][i]
+            print(sum_mu / sum_1)
             self.mu[i] = sum_mu / sum_1
 
 
@@ -170,7 +200,22 @@ class NGnet:
                 sum_diff += (diff * diff.T) * self.posterior_i[t][i]
             self.Sigma[i] = sum_diff / sum_1
             
+
+    # This function updates W according to equation (3.4c)
+    def offline_W_update(self, x_list, y_list):
+
+        for i, W_i in enumerate(self.W):
+            sum_xx = 0
+            sum_yx = 0
+            for t, (x_t, y_t) in enumerate(zip(x_list, y_list)):
+                x_tilde = np.insert(x_t, len(x_t), 1.0).reshape(-1, 1)
+                sum_xx = x_tilde * x_tilde.T * self.posterior_i[t][i]
+                sum_yx = y_t * x_tilde.T * self.posterior_i[t][i]
+            W_tilde = np.dot(sum_yx, np.linalg.inv(sum_xx))
+            self.W[i] = W_tilde[0:self.D, 0:self.N]
         
+        
+            
 
 if __name__ == '__main__':
 
@@ -188,8 +233,8 @@ if __name__ == '__main__':
         x_list.append(2 * np.random.rand(N, 1) - 1)
         y_list.append(2 * np.random.rand(D, 1) - 1)
 
-    for x_t in x_list:
-        print(ngnet.get_output_y(x_t))
+    # for x_t in x_list:
+    #     print(ngnet.get_output_y(x_t))
         
     ngnet.offline_learning(x_list, y_list)
 
