@@ -220,7 +220,7 @@ class NGnet:
         for i, W_i in enumerate(self.W):
             sum_xx = 0
             sum_yx = 0
-            alpha_I = np.diag([0.000001 for i in range(self.N+1)])   # Regularization matrix
+            alpha_I = np.diag([0.01 for i in range(self.N+1)])   # Regularization matrix
             for t, (x_t, y_t) in enumerate(zip(x_list, y_list)):
                 x_tilde = np.insert(x_t, len(x_t), 1.0).reshape(-1, 1)
                 sum_xx = x_tilde * x_tilde.T * self.posterior_i[t][i]
@@ -255,31 +255,41 @@ class NGnet:
             log_likelihood += np.log(p_t)
 
         return log_likelihood
-        
+
+
+def mexican_hat_function(x_1, x_2):
+
+    s = np.sqrt(np.power(x_1, 2) + np.power(x_2, 2))
+    return np.sin(s) / s
             
 
 if __name__ == '__main__':
 
-    N = 4
-    D = 3
-    M = 5
+    N = 2
+    D = 1
+    M = 10
     
     ngnet = NGnet(N, D, M)
 
     x_list = []
     y_list = []
-    T = 100
-    
+    T = 1000
+
     for t in range(T):
-        x_list.append(2 * np.random.rand(N, 1) - 1)
-        y_list.append(2 * np.random.rand(D, 1) - 1)
+        x_list.append(20 * np.random.rand(N, 1) - 10)
 
-    # for x_t in x_list:
-    #     print(ngnet.get_output_y(x_t))
-
-    for i in range(10):
+    for x_t in x_list:
+        y_list.append(np.array(mexican_hat_function(x_t[0], x_t[1])))
+    
+    for i in range(20):
         ngnet.offline_learning(x_list, y_list)
         print(ngnet.calc_log_likelihood(x_list, y_list))
 
-    # x = np.array([0.4, 0.5, 0.3, 0.2]).reshape(-1, 1)
-    
+    previous_likelihood = -np.inf
+    next_likelihood = -np.inf
+    while abs(next_likelihood - previous_likelihood) < 1:
+        ngnet.offline_learning(x_list, y_list)
+        print(ngnet.calc_log_likelihood(x_list, y_list))
+        
+    # for x_t in x_list:
+    #     print(ngnet.get_output_y(x_t))
