@@ -1,7 +1,8 @@
 from scipy.stats import multivariate_normal
 import numpy as np
 import numpy.linalg as LA
-import random 
+import random
+import pdb
 
 # This code is the implementation of the Normalized Gaussian Network (NGnet)
 # In the details, see the article shown below.
@@ -47,7 +48,7 @@ class NGnet:
         self.M = M
 
         for i in range(M):
-            self.var.append(random.random())
+            self.var.append(1)
         
 
     ### The functions written below are to calculate the output y given the input x
@@ -73,10 +74,10 @@ class NGnet:
         # Denominator of equation (2.1b)
         sum_g_j = 0
         for j in range(self.M):
-            sum_g_j += self.multinorm_pdf(x, self.mu[j], self.Sigma[j])
+            sum_g_j += self.multinorm_pdf2(x, self.mu[j], self.Sigma[j])
 
         # Numerator of equation (2.1b)
-        g_i = self.multinorm_pdf(x, self.mu[i], self.Sigma[i])
+        g_i = self.multinorm_pdf2(x, self.mu[i], self.Sigma[i])
 
         # Equation (2.1b)
         N_i = g_i / sum_g_j
@@ -102,6 +103,18 @@ class NGnet:
         log2pi = np.log(2 * np.pi)
         
         return np.exp(-0.5 * (rank * log2pi + maha + logdet))
+
+
+    def multinorm_pdf2(self, x, mean, cov):
+
+        Nlog2pi = self.N * np.log(2 * np.pi)
+        logdet = np.log(LA.det(cov))
+        covinv = LA.inv(cov)
+        diff = x - mean
+
+        logpdf = -0.5 * (Nlog2pi + logdet + (diff.T @ covinv @ diff))
+
+        return np.exp(logpdf)
     
     
     # This function calculates W_i * x.
@@ -121,6 +134,7 @@ class NGnet:
             print('Error: The number of input vectors x is not equal to the number of output vectors y.')
             exit()
 
+        self.posterior_i = []
         self.offline_E_step(x_list, y_list)
         self.offline_M_step(x_list, y_list)
 
@@ -146,7 +160,7 @@ class NGnet:
         P_i = 1 / self.M
 
         # Equation (2.3b)
-        P_x = self.multinorm_pdf(x, self.mu[i], self.Sigma[i])
+        P_x = self.multinorm_pdf2(x, self.mu[i], self.Sigma[i])
 
         # Equation (2.3c)
         diff = y.reshape(-1, 1) - self.linear_regression(x, i)
@@ -154,7 +168,7 @@ class NGnet:
 
         # Equation (2.2)
         P_xyi = P_i * P_x * P_y
-        
+
         return P_xyi
 
 
@@ -172,8 +186,9 @@ class NGnet:
         self.offline_Sigma_update(x_list)
         self.offline_mu_update(x_list)
         self.offline_W_update(x_list, y_list)
+        self.offline_var_update(x_list, y_list)
     
-
+        
     # This function updates mu according to equation (3.4a)
     def offline_mu_update(self, x_list):
 
@@ -183,7 +198,7 @@ class NGnet:
             for t, x_t in enumerate(x_list):
                 sum_1 += self.posterior_i[t][i]
                 sum_mu += x_t.T * self.posterior_i[t][i]
-            self.mu[i] = sum_mu / sum_1
+            self.mu[i] = (sum_mu / sum_1).T
 
 
     # This function updates Sigma according to equation (3.4b)
@@ -194,7 +209,7 @@ class NGnet:
             sum_diff = 0
             for t, x_t in enumerate(x_list):
                 sum_1 += self.posterior_i[t][i]
-                diff = x_t - self.mu[i].T
+                diff = x_t - self.mu[i]
                 sum_diff += (diff * diff.T) * self.posterior_i[t][i]
             self.Sigma[i] = sum_diff / sum_1
             
@@ -211,8 +226,6 @@ class NGnet:
                 sum_xx = x_tilde * x_tilde.T * self.posterior_i[t][i]
                 sum_yx = y_t * x_tilde.T * self.posterior_i[t][i]
             self.W[i] = np.dot(sum_yx, LA.inv(sum_xx + alpha_I))
-            # W_tilde = np.dot(sum_yx, LA.inv(sum_xx + alpha_I))
-            # self.W[i] = W_tilde[0:self.D, 0:self.N]
 
 
     # This function updates var according to equation (3.4d)
@@ -222,15 +235,17 @@ class NGnet:
         pass
 
 
+    # This function calculates the log likelihood according to equation (3.3)
     def calc_log_likelihood(self, x_list, y_list):
 
         self.offline_iteration_num += 1
-        
+
         log_likelihood = 0
         for x_t, y_t in zip(x_list, y_list):
             p_t = 0
             for i in range(self.M):
-                p_t += self.calc_P_xyi(x_t, y_t, i)
+                p = self.calc_P_xyi(x_t, y_t, i)
+                p_t += p
             log_likelihood += np.log(p_t)
 
         return log_likelihood
@@ -259,7 +274,6 @@ if __name__ == '__main__':
     for i in range(10):
         ngnet.offline_learning(x_list, y_list)
         print(ngnet.calc_log_likelihood(x_list, y_list))
-
 
     # x = np.array([0.4, 0.5, 0.3, 0.2]).reshape(-1, 1)
     
