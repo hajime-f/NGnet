@@ -231,8 +231,14 @@ class NGnet:
     # This function updates var according to equation (3.4d)
     def offline_var_update(self, x_list, y_list):
         
-        
-        pass
+        for i, var_i in enumerate(self.var):
+            sum_1 = 0
+            sum_diff = 0
+            for t, (x_t, y_t) in enumerate(zip(x_list, y_list)):
+                sum_1 += self.posterior_i[t][i]
+                diff = y_t - self.linear_regression(x_t, i)
+                sum_diff += (diff.T @ diff) * self.posterior_i[t][i]
+            self.var[i] = np.sqrt((1/self.D) * (sum_diff / sum_1))
 
 
     # This function calculates the log likelihood according to equation (3.3)
