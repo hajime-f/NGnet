@@ -1,5 +1,6 @@
 from scipy.stats import multivariate_normal
 import numpy as np
+import numpy.linalg as LA
 import random 
 
 # This code is the implementation of the Normalized Gaussian Network (NGnet)
@@ -23,7 +24,7 @@ class NGnet:
     var = []    # Covariance matrices of D-dimensional Gaussian functions
     posterior_i = []   # Posterior probability that the i-th unit is selected for each observation
 
-    T = 0       # The number of learning data
+    offline_iteration_num = 0
     
     def __init__(self, N, D, M):
         
@@ -82,11 +83,11 @@ class NGnet:
         
         return N_i        
     
-
+    
     def multinorm_pdf(self, x, mean, cov):
         
         # "eigh" assumes the matrix is Hermitian.
-        vals, vecs = np.linalg.eigh(cov)
+        vals, vecs = LA.eigh(cov)
         logdet = np.sum(np.log(vals))
         valsinv = np.array([1./v for v in vals])
         
@@ -119,8 +120,6 @@ class NGnet:
         if len(x_list) != len(y_list):
             print('Error: The number of input vectors x is not equal to the number of output vectors y.')
             exit()
-        else:
-            self.T = len(x_list)
 
         self.offline_E_step(x_list, y_list)
         self.offline_M_step(x_list, y_list)
@@ -163,15 +162,15 @@ class NGnet:
         
         log_pdf1 = - self.D/2 * np.log(2 * np.pi)
         log_pdf2 = - self.D * np.log(var)
-        log_pdf3 = - (1/(2 * np.power(var, 2))) * np.dot(diff.T, diff)
+        log_pdf3 = - (1/(2 * np.power(var, 2))) * (diff.T @ diff)
         return np.exp(log_pdf1 + log_pdf2 + log_pdf3)
     
             
     # This function executes M-step written by equation (3.4)
     def offline_M_step(self, x_list, y_list):
         
-        self.offline_mu_update(x_list)
         self.offline_Sigma_update(x_list)
+        self.offline_mu_update(x_list)
         self.offline_W_update(x_list, y_list)
     
 
@@ -184,7 +183,6 @@ class NGnet:
             for t, x_t in enumerate(x_list):
                 sum_1 += self.posterior_i[t][i]
                 sum_mu += x_t.T * self.posterior_i[t][i]
-            print(sum_mu / sum_1)
             self.mu[i] = sum_mu / sum_1
 
 
@@ -207,13 +205,35 @@ class NGnet:
         for i, W_i in enumerate(self.W):
             sum_xx = 0
             sum_yx = 0
+            alpha_I = np.diag([0.000001 for i in range(self.N+1)])   # Regularization matrix
             for t, (x_t, y_t) in enumerate(zip(x_list, y_list)):
                 x_tilde = np.insert(x_t, len(x_t), 1.0).reshape(-1, 1)
                 sum_xx = x_tilde * x_tilde.T * self.posterior_i[t][i]
                 sum_yx = y_t * x_tilde.T * self.posterior_i[t][i]
-            W_tilde = np.dot(sum_yx, np.linalg.inv(sum_xx))
-            self.W[i] = W_tilde[0:self.D, 0:self.N]
+            self.W[i] = np.dot(sum_yx, LA.inv(sum_xx + alpha_I))
+            # W_tilde = np.dot(sum_yx, LA.inv(sum_xx + alpha_I))
+            # self.W[i] = W_tilde[0:self.D, 0:self.N]
+
+
+    # This function updates var according to equation (3.4d)
+    def offline_var_update(self, x_list, y_list):
         
+        
+        pass
+
+
+    def calc_log_likelihood(self, x_list, y_list):
+
+        self.offline_iteration_num += 1
+        
+        log_likelihood = 0
+        for x_t, y_t in zip(x_list, y_list):
+            p_t = 0
+            for i in range(self.M):
+                p_t += self.calc_P_xyi(x_t, y_t, i)
+            log_likelihood += np.log(p_t)
+
+        return log_likelihood
         
             
 
@@ -235,8 +255,10 @@ if __name__ == '__main__':
 
     # for x_t in x_list:
     #     print(ngnet.get_output_y(x_t))
-        
-    ngnet.offline_learning(x_list, y_list)
+
+    for i in range(10):
+        ngnet.offline_learning(x_list, y_list)
+        print(ngnet.calc_log_likelihood(x_list, y_list))
 
 
     # x = np.array([0.4, 0.5, 0.3, 0.2]).reshape(-1, 1)
