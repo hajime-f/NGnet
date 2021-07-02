@@ -1,4 +1,5 @@
-from scipy.stats import multivariate_normal
+from mpl_toolkits.mplot3d import Axes3D
+import matplotlib.pyplot as plt
 import numpy as np
 import numpy.linalg as LA
 import random
@@ -220,7 +221,7 @@ class NGnet:
         for i, W_i in enumerate(self.W):
             sum_xx = 0
             sum_yx = 0
-            alpha_I = np.diag([0.01 for i in range(self.N+1)])   # Regularization matrix
+            alpha_I = np.diag([0.00001 for i in range(self.N+1)])   # Regularization matrix
             for t, (x_t, y_t) in enumerate(zip(x_list, y_list)):
                 x_tilde = np.insert(x_t, len(x_t), 1.0).reshape(-1, 1)
                 sum_xx = x_tilde * x_tilde.T * self.posterior_i[t][i]
@@ -257,11 +258,11 @@ class NGnet:
         return log_likelihood
 
 
-def mexican_hat_function(x_1, x_2):
-
+# Mexican hat function
+def func1(x_1, x_2):
     s = np.sqrt(np.power(x_1, 2) + np.power(x_2, 2))
     return np.sin(s) / s
-            
+
 
 if __name__ == '__main__':
 
@@ -275,21 +276,52 @@ if __name__ == '__main__':
     y_list = []
     T = 1000
 
+    # Preparing for learning data
     for t in range(T):
         x_list.append(20 * np.random.rand(N, 1) - 10)
-
     for x_t in x_list:
-        y_list.append(np.array(mexican_hat_function(x_t[0], x_t[1])))
-    
+        y_list.append(np.array(func1(x_t[0], x_t[1])))
+
+    # Training NGnet
     for i in range(20):
         ngnet.offline_learning(x_list, y_list)
         print(ngnet.calc_log_likelihood(x_list, y_list))
 
-    previous_likelihood = -np.inf
-    next_likelihood = -np.inf
-    while abs(next_likelihood - previous_likelihood) < 1:
-        ngnet.offline_learning(x_list, y_list)
-        print(ngnet.calc_log_likelihood(x_list, y_list))
+    # Inference the output y
+    appx_list = []
+    for x_t in x_list:
+        y_t = ngnet.get_output_y(x_t)
+        appx_list.append(y_t)
         
-    # for x_t in x_list:
-    #     print(ngnet.get_output_y(x_t))
+    # Plot graph
+    x1_list = []
+    x2_list = []
+    y1_list = []
+    for x_t, y_t in zip(x_list, y_list):
+        x1_list.append(x_t[0].item())
+        x2_list.append(x_t[1].item())
+        y1_list.append(y_t.item())
+    X1_appx = np.array(x1_list)
+    X2_appx = np.array(x2_list)
+    Y1_appx = np.array(y1_list)
+
+    x1_real = np.arange(-10.0, 10.0, 0.02)
+    x2_real = np.arange(-10.0, 10.0, 0.02)
+
+    X1_real, X2_real = np.meshgrid(x1_real, x2_real)
+    Y1_real = func1(X1_real, X2_real)
+
+    fig = plt.figure()
+    ax = Axes3D(fig)
+
+    ax.set_xlabel("x1")
+    ax.set_ylabel("x2")
+    ax.set_zlabel("Y")
+
+    ax.plot_wireframe(X1_real, X2_real, Y1_real)
+    ax.plot(X1_appx, X2_appx, Y1_appx, marker="o", linestyle='None', color="r")
+
+    plt.show()
+    
+
+    
