@@ -3,7 +3,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import numpy.linalg as LA
 import random
-import pdb
 
 # This code is the implementation of the Normalized Gaussian Network (NGnet)
 # In the details, see the article shown below.
@@ -25,8 +24,6 @@ class NGnet:
 
     var = []    # Covariance matrices of D-dimensional Gaussian functions
     posterior_i = []   # Posterior probability that the i-th unit is selected for each observation
-
-    offline_iteration_num = 0
     
     def __init__(self, N, D, M):
         
@@ -40,7 +37,6 @@ class NGnet:
 
         for i in range(M):
             w = 2 * np.random.rand(D, N) - 1
-            # w = np.array([[0.5, 0.4, 0.7, 0.2], [0.2, 0.5, 0.3, 0.7], [0.3, 0.8, 0.2, 0.8]])
             w_tilde = np.insert(w, np.shape(w)[1], 1.0, axis=1)
             self.W.append(w_tilde)
 
@@ -54,7 +50,7 @@ class NGnet:
 
     ### The functions written below are to calculate the output y given the input x
         
-    # This function returns the output y corresponding the input x.
+    # This function returns the output y corresponding the input x according to equation (2.1a)
     def get_output_y(self, x):
 
         # Initialization of the output vector y
@@ -69,44 +65,25 @@ class NGnet:
         return y
 
 
-    # This function calculates N_i(x).
+    # This function calculates N_i(x) according to equation (2.1b)
     def evaluate_Normalized_Gaussian_value(self, x, i):
 
         # Denominator of equation (2.1b)
         sum_g_j = 0
         for j in range(self.M):
-            sum_g_j += self.multinorm_pdf2(x, self.mu[j], self.Sigma[j])
+            sum_g_j += self.multinorm_pdf(x, self.mu[j], self.Sigma[j])
 
         # Numerator of equation (2.1b)
-        g_i = self.multinorm_pdf2(x, self.mu[i], self.Sigma[i])
+        g_i = self.multinorm_pdf(x, self.mu[i], self.Sigma[i])
 
         # Equation (2.1b)
         N_i = g_i / sum_g_j
         
         return N_i        
+
     
-    
+    # This function calculates multivariate Gaussian G(x) according to equation (2.1c)
     def multinorm_pdf(self, x, mean, cov):
-        
-        # "eigh" assumes the matrix is Hermitian.
-        vals, vecs = LA.eigh(cov)
-        logdet = np.sum(np.log(vals))
-        valsinv = np.array([1./v for v in vals])
-        
-        # "vecs" is R times D while "vals" is a R-vector where R is the matrix rank.
-        # The asterisk performs element-wise multiplication.
-        U = vecs * np.sqrt(valsinv)
-        rank = len(vals)
-        dev = x - mean
-
-        # "maha" for "Mahalanobis distance".
-        maha = np.square(np.dot(dev.T, U)).sum()
-        log2pi = np.log(2 * np.pi)
-        
-        return np.exp(-0.5 * (rank * log2pi + maha + logdet))
-
-
-    def multinorm_pdf2(self, x, mean, cov):
 
         Nlog2pi = self.N * np.log(2 * np.pi)
         logdet = np.log(LA.det(cov))
@@ -161,7 +138,7 @@ class NGnet:
         P_i = 1 / self.M
 
         # Equation (2.3b)
-        P_x = self.multinorm_pdf2(x, self.mu[i], self.Sigma[i])
+        P_x = self.multinorm_pdf(x, self.mu[i], self.Sigma[i])
 
         # Equation (2.3c)
         diff = y.reshape(-1, 1) - self.linear_regression(x, i)
@@ -173,6 +150,7 @@ class NGnet:
         return P_xyi
 
 
+    # This function calculates normal function according to equation (2.3c)
     def norm_pdf(self, diff, var):
         
         log_pdf1 = - self.D/2 * np.log(2 * np.pi)
@@ -244,8 +222,6 @@ class NGnet:
 
     # This function calculates the log likelihood according to equation (3.3)
     def calc_log_likelihood(self, x_list, y_list):
-
-        self.offline_iteration_num += 1
 
         log_likelihood = 0
         for x_t, y_t in zip(x_list, y_list):
