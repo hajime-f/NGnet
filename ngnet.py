@@ -22,7 +22,7 @@ class NGnet:
     D = 0       # The dimension of output data
     M = 0       # The number of units
 
-    var = []    # Covariance matrices of D-dimensional Gaussian functions
+    var = []    # Variance of D-dimensional Gaussian functions
     posterior_i = []   # Posterior probability that the i-th unit is selected for each observation
     
     def __init__(self, N, D, M):
@@ -106,19 +106,19 @@ class NGnet:
     
     ### The functions written below are to learn the parameters according to the EM algorithm.
 
-    def offline_learning(self, x_list, y_list):
+    def batch_learning(self, x_list, y_list):
         
         if len(x_list) != len(y_list):
             print('Error: The number of input vectors x is not equal to the number of output vectors y.')
             exit()
 
         self.posterior_i = []
-        self.offline_E_step(x_list, y_list)
-        self.offline_M_step(x_list, y_list)
+        self.batch_E_step(x_list, y_list)
+        self.batch_M_step(x_list, y_list)
 
 
     # This function executes E-step written by equation (3.1)
-    def offline_E_step(self, x_list, y_list):
+    def batch_E_step(self, x_list, y_list):
 
         for x_t, y_t in zip(x_list, y_list):
             p_t = []
@@ -160,16 +160,16 @@ class NGnet:
     
             
     # This function executes M-step written by equation (3.4)
-    def offline_M_step(self, x_list, y_list):
+    def batch_M_step(self, x_list, y_list):
         
-        self.offline_Sigma_update(x_list)
-        self.offline_mu_update(x_list)
-        self.offline_W_update(x_list, y_list)
-        self.offline_var_update(x_list, y_list)
+        self.batch_Sigma_update(x_list)
+        self.batch_mu_update(x_list)
+        self.batch_W_update(x_list, y_list)
+        self.batch_var_update(x_list, y_list)
     
         
     # This function updates mu according to equation (3.4a)
-    def offline_mu_update(self, x_list):
+    def batch_mu_update(self, x_list):
 
         for i, mu_i in enumerate(self.mu):
             sum_1 = 0
@@ -181,7 +181,7 @@ class NGnet:
 
 
     # This function updates Sigma according to equation (3.4b)
-    def offline_Sigma_update(self, x_list):
+    def batch_Sigma_update(self, x_list):
 
         for i, Sigma_i in enumerate(self.Sigma):
             sum_1 = 0
@@ -194,12 +194,12 @@ class NGnet:
             
 
     # This function updates W according to equation (3.4c)
-    def offline_W_update(self, x_list, y_list):
+    def batch_W_update(self, x_list, y_list):
 
+        alpha_I = np.diag([0.00001 for i in range(self.N+1)])   # Regularization matrix
         for i, W_i in enumerate(self.W):
             sum_xx = 0
             sum_yx = 0
-            alpha_I = np.diag([0.00001 for i in range(self.N+1)])   # Regularization matrix
             for t, (x_t, y_t) in enumerate(zip(x_list, y_list)):
                 x_tilde = np.insert(x_t, len(x_t), 1.0).reshape(-1, 1)
                 sum_xx = x_tilde * x_tilde.T * self.posterior_i[t][i]
@@ -208,7 +208,7 @@ class NGnet:
 
 
     # This function updates var according to equation (3.4d)
-    def offline_var_update(self, x_list, y_list):
+    def batch_var_update(self, x_list, y_list):
         
         for i, var_i in enumerate(self.var):
             sum_1 = 0
@@ -231,13 +231,18 @@ class NGnet:
                 p_t += p
             log_likelihood += np.log(p_t)
 
-        return log_likelihood
+        return log_likelihood.item()
 
 
-# Mexican hat function
+    
 def func1(x_1, x_2):
     s = np.sqrt(np.power(x_1, 2) + np.power(x_2, 2))
     return np.sin(s) / s
+
+def func2(x_1, x_2):
+    xx1 = np.power(x_1, 2)
+    xx2 = np.power(x_2, 2)
+    return 3 * np.power(np.e, -xx1-xx2) * (2 * xx1 + xx2)
 
 
 if __name__ == '__main__':
@@ -245,35 +250,36 @@ if __name__ == '__main__':
     N = 2
     D = 1
     M = 10
+    T = 1000
     
     ngnet = NGnet(N, D, M)
 
-    x_list = []
-    y_list = []
-    T = 1000
-
     # Preparing for learning data
+    learning_x_list = []
     for t in range(T):
-        x_list.append(20 * np.random.rand(N, 1) - 10)
-    for x_t in x_list:
-        y_list.append(np.array(func1(x_t[0], x_t[1])))
+        learning_x_list.append(20 * np.random.rand(N, 1) - 10)
+    learning_y_list = []
+    for x_t in learning_x_list:
+        learning_y_list.append(np.array(func1(x_t[0], x_t[1])))
 
     # Training NGnet
     for i in range(20):
-        ngnet.offline_learning(x_list, y_list)
-        print(ngnet.calc_log_likelihood(x_list, y_list))
+        ngnet.batch_learning(learning_x_list, learning_y_list)
+        print(ngnet.calc_log_likelihood(learning_x_list, learning_y_list))
 
     # Inference the output y
-    appx_list = []
-    for x_t in x_list:
-        y_t = ngnet.get_output_y(x_t)
-        appx_list.append(y_t)
+    inference_x_list = []
+    for t in range(T):
+        inference_x_list.append(20 * np.random.rand(N, 1) - 10)
+    inference_y_list = []
+    for x_t in inference_x_list:
+        inference_y_list.append(ngnet.get_output_y(x_t))
         
     # Plot graph
     x1_list = []
     x2_list = []
     y1_list = []
-    for x_t, y_t in zip(x_list, y_list):
+    for x_t, y_t in zip(inference_x_list, inference_y_list):
         x1_list.append(x_t[0].item())
         x2_list.append(x_t[1].item())
         y1_list.append(y_t.item())
