@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import numpy.linalg as LA
 import random
+import pdb
 
 # This code is the implementation of the Normalized Gaussian Network (NGnet)
 # In the details, see the article shown below.
@@ -24,6 +25,7 @@ class NGnet:
 
     var = []    # Variance of D-dimensional Gaussian functions
     posterior_i = []   # Posterior probability that the i-th unit is selected for each observation
+    T = 0
     
     def __init__(self, N, D, M):
         
@@ -111,6 +113,8 @@ class NGnet:
         if len(x_list) != len(y_list):
             print('Error: The number of input vectors x is not equal to the number of output vectors y.')
             exit()
+        else:
+            self.T = len(x_list)
 
         self.posterior_i = []
         self.batch_E_step(x_list, y_list)
@@ -171,7 +175,7 @@ class NGnet:
     # This function updates mu according to equation (3.4a)
     def batch_mu_update(self, x_list):
 
-        for i, mu_i in enumerate(self.mu):
+        for i in range(self.M):
             sum_1 = 0
             sum_mu = 0
             for t, x_t in enumerate(x_list):
@@ -183,13 +187,13 @@ class NGnet:
     # This function updates Sigma according to equation (3.4b)
     def batch_Sigma_update(self, x_list):
 
-        for i, Sigma_i in enumerate(self.Sigma):
+        for i in range(self.M):
             sum_1 = 0
             sum_diff = 0
             for t, x_t in enumerate(x_list):
                 sum_1 += self.posterior_i[t][i]
                 diff = x_t - self.mu[i]
-                sum_diff += (diff * diff.T) * self.posterior_i[t][i]
+                sum_diff += (diff @ diff.T) * self.posterior_i[t][i]
             self.Sigma[i] = sum_diff / sum_1
             
 
@@ -202,9 +206,9 @@ class NGnet:
             sum_yx = 0
             for t, (x_t, y_t) in enumerate(zip(x_list, y_list)):
                 x_tilde = np.insert(x_t, len(x_t), 1.0).reshape(-1, 1)
-                sum_xx = x_tilde * x_tilde.T * self.posterior_i[t][i]
-                sum_yx = y_t * x_tilde.T * self.posterior_i[t][i]
-            self.W[i] = np.dot(sum_yx, LA.inv(sum_xx + alpha_I))
+                sum_xx += (x_tilde * x_tilde.T * self.posterior_i[t][i]) / self.T
+                sum_yx += (y_t * x_tilde.T * self.posterior_i[t][i]) / self.T
+            self.W[i] = sum_yx @ LA.inv(sum_xx + alpha_I)
 
 
     # This function updates var according to equation (3.4d)
@@ -227,8 +231,7 @@ class NGnet:
         for x_t, y_t in zip(x_list, y_list):
             p_t = 0
             for i in range(self.M):
-                p = self.calc_P_xyi(x_t, y_t, i)
-                p_t += p
+                p_t += self.calc_P_xyi(x_t, y_t, i)
             log_likelihood += np.log(p_t)
 
         return log_likelihood.item()
@@ -249,8 +252,8 @@ if __name__ == '__main__':
 
     N = 2
     D = 1
-    M = 10
-    T = 1000
+    M = 20
+    T = 1200
     
     ngnet = NGnet(N, D, M)
 
@@ -263,9 +266,15 @@ if __name__ == '__main__':
         learning_y_list.append(np.array(func1(x_t[0], x_t[1])))
 
     # Training NGnet
-    for i in range(20):
+    previous_likelihood = -10 ** 6
+    next_likelihood = -10 ** 5
+    while abs(next_likelihood - previous_likelihood) > 5:
         ngnet.batch_learning(learning_x_list, learning_y_list)
-        print(ngnet.calc_log_likelihood(learning_x_list, learning_y_list))
+        previous_likelihood = next_likelihood
+        next_likelihood = ngnet.calc_log_likelihood(learning_x_list, learning_y_list)
+        print(next_likelihood)
+        if previous_likelihood >= next_likelihood:
+            print('Warning: Next likelihood is smaller than previous.')
 
     # Inference the output y
     inference_x_list = []
