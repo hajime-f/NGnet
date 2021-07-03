@@ -2,7 +2,7 @@ from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.linalg as LA
-import random
+import random, pdb
 
 # This code is the implementation of the Normalized Gaussian Network (NGnet)
 # In the details, see the article shown below.
@@ -95,13 +95,20 @@ class NGnet:
         logpdf = -0.5 * (Nlog2pi + logdet + (diff.T @ covinv @ diff))
 
         return np.exp(logpdf)
-    
+
     
     # This function calculates W_i * x.
     def linear_regression(self, x, i):
 
-        x_tilde = np.insert(x, len(x), 1.0).reshape(-1, 1)
-        Wx = np.dot(self.W[i], x_tilde)
+        # x_tilde = np.insert(x, len(x), 1.0).reshape(-1, 1)
+        # Wx = np.dot(self.W[i], x_tilde)
+
+        a = []
+        for j in range(len(x)):
+            a.append(x[j].item())
+        a.append(1)
+        x_tilde2 = np.array(a).reshape(-1, 1)
+        Wx = np.dot(self.W[i], x_tilde2)
 
         return Wx
 
@@ -246,6 +253,17 @@ def func2(x_1, x_2):
     xx1 = np.power(x_1, 2)
     xx2 = np.power(x_2, 2)
     return 3 * np.power(np.e, -xx1-xx2) * (2 * xx1 + xx2)
+
+def func3(x_1, x_2):
+
+    xx_1 = np.power(x_1, 2)
+    xx_2 = np.power(x_2, 2)
+    
+    f1 = np.power(np.e, (-10 * xx_1))
+    f2 = np.power(np.e, (-50 * xx_2))
+    f3 = 1.25 * np.power(np.e, -5 * (xx_1 + xx_2))
+
+    return max([f1, f2, f3])
 
 
 if __name__ == '__main__':
