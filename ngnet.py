@@ -3,7 +3,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import numpy.linalg as LA
 import random
-import pdb
 
 # This code is the implementation of the Normalized Gaussian Network (NGnet)
 # In the details, see the article shown below.
@@ -19,13 +18,14 @@ class NGnet:
     Sigma = []  # Covariance matrices of N-dimensional Gaussian functions
     W = []      # Linear regression matrices in the units
     
-    N  = 0      # The dimension of input data
-    D = 0       # The dimension of output data
-    M = 0       # The number of units
+    N  = 0      # Dimension of input data
+    D = 0       # Dimension of output data
+    M = 0       # Number of units
 
     var = []    # Variance of D-dimensional Gaussian functions
     posterior_i = []   # Posterior probability that the i-th unit is selected for each observation
-    T = 0
+    
+    T = 0       # Number of learning data
     
     def __init__(self, N, D, M):
         
@@ -158,8 +158,8 @@ class NGnet:
     def norm_pdf(self, diff, var):
         
         log_pdf1 = - self.D/2 * np.log(2 * np.pi)
-        log_pdf2 = - self.D * np.log(var)
-        log_pdf3 = - (1/(2 * np.power(var, 2))) * (diff.T @ diff)
+        log_pdf2 = - self.D/2 * np.log(var)
+        log_pdf3 = - (1/(2 * var)) * (diff.T @ diff)
         return np.exp(log_pdf1 + log_pdf2 + log_pdf3)
     
             
@@ -221,7 +221,7 @@ class NGnet:
                 sum_1 += self.posterior_i[t][i]
                 diff = y_t - self.linear_regression(x_t, i)
                 sum_diff += (diff.T @ diff) * self.posterior_i[t][i]
-            self.var[i] = np.sqrt((1/self.D) * (sum_diff / sum_1))
+            self.var[i] = (1/self.D) * (sum_diff / sum_1)
 
 
     # This function calculates the log likelihood according to equation (3.3)
@@ -253,13 +253,14 @@ if __name__ == '__main__':
     N = 2
     D = 1
     M = 20
-    T = 1200
+    learning_T = 1000
+    inference_T = 1000
     
     ngnet = NGnet(N, D, M)
 
     # Preparing for learning data
     learning_x_list = []
-    for t in range(T):
+    for t in range(learning_T):
         learning_x_list.append(20 * np.random.rand(N, 1) - 10)
     learning_y_list = []
     for x_t in learning_x_list:
@@ -278,7 +279,7 @@ if __name__ == '__main__':
 
     # Inference the output y
     inference_x_list = []
-    for t in range(T):
+    for t in range(inference_T):
         inference_x_list.append(20 * np.random.rand(N, 1) - 10)
     inference_y_list = []
     for x_t in inference_x_list:
