@@ -1,5 +1,5 @@
 all:
-	python3 ngnet.py
+	python3 ngnet_oem.py
 install:
 	python3 -m pip install -r requirements.txt
 prof:

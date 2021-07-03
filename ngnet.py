@@ -1,3 +1,4 @@
+from scipy.stats import multivariate_normal
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
 import numpy as np
@@ -16,9 +17,9 @@ class NGnet:
     
     mu = []     # Center vectors of N-dimensional Gaussian functions
     Sigma = []  # Covariance matrices of N-dimensional Gaussian functions
-    W = []      # Linear regression matrices in the units
+    W = []      # Linear regression matrices in units
     
-    N  = 0      # Dimension of input data
+    N = 0       # Dimension of input data
     D = 0       # Dimension of output data
     M = 0       # Number of units
 
@@ -132,11 +133,11 @@ class NGnet:
     def batch_E_step(self, x_list, y_list):
 
         for x_t, y_t in zip(x_list, y_list):
+            sum_p = 0
+            for i in range(self.M):
+                sum_p += self.calc_P_xyi(x_t, y_t, i)
             p_t = []
             for i in range(self.M):
-                sum_p = 0
-                for j in range(self.M):
-                    sum_p += self.calc_P_xyi(x_t, y_t, j)
                 p = self.calc_P_xyi(x_t, y_t, i)
                 p_t.append(p / sum_p)
             self.posterior_i.append(p_t)
@@ -150,6 +151,7 @@ class NGnet:
 
         # Equation (2.3b)
         P_x = self.multinorm_pdf(x, self.mu[i], self.Sigma[i])
+        # P_x = multivariate_normal.pdf(x.flatten(), self.mu[i].flatten(), self.Sigma[i])
 
         # Equation (2.3c)
         diff = y.reshape(-1, 1) - self.linear_regression(x, i)
