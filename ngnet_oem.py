@@ -55,7 +55,7 @@ class NGnet_OEM:
         self.eta = 1 / ((1 + lam) / 0.9999)
 
         self.one = [1.0 for i in range(M)]
-        self.x = [2 * np.random.rand(N, 1) - 1 for i in range(M)]
+        self.x = [np.zeros((N, 1)) for i in range(M)]
         self.y2 = [1.0 for i in range(M)]
         self.xy = [np.zeros((N+1, D)) for i in range(M)]
         
@@ -154,6 +154,7 @@ class NGnet_OEM:
         
         self.update_weighted_mean(x_t, y_t)
         self.update_mu()
+        # self.update_Lambda(x_t)
         self.update_var()
 
 
@@ -185,6 +186,22 @@ class NGnet_OEM:
         for i in range(self.M):
             self.mu[i] = self.x[i] / self.one[i]
 
+
+    def update_Lambda(self, x_t):
+        
+        tmp = [x_t[j].item() for j in range(len(x_t))]
+        tmp.append(1)
+        x_tilde = np.array(tmp).reshape(-1, 1)
+
+        for i in range(self.M):
+            
+            t1 = self.Lambda[i] @ x_tilde
+            t2 = x_tilde.T @ self.Lambda[i]
+            numerator = self.posterior_i[i] * t1 @ t2
+            denominator = (1 / self.eta) - 1 + self.posterior_i[i] * x_tilde.T @ self.Lambda[i] @ x_tilde
+
+            self.Lambda[i] = (1 / (1 - self.eta)) * (self.Lambda[i] - numerator / denominator)
+            
 
     def update_var(self):
 
