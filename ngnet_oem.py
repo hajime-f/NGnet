@@ -37,32 +37,28 @@ class NGnet_OEM:
     def __init__(self, N, D, M, lam):
 
 
-        self.mu.append([2 * np.random.rand(N, 1) - 1 for i in range(M)])
+        self.mu = [2 * np.random.rand(N, 1) - 1 for i in range(M)]
 
-        p = []
         for i in range(M):
-            p.append(np.diag([random.random() for j in range(N + 1)]))
-        self.Lambda.append(p)
-        
-        p = []
-        for i in range(M):
-            p.append(self.Lambda[0][i][0:N, 0:N])
-        self.Sigma.append(p)
+            self.Lambda.append(np.diag([random.random() for j in range(N + 1)]))
 
-        p = []
+        for i in range(M):
+            self.Sigma.append(self.Lambda[i][0:N, 0:N])
+
         for i in range(M):
             w = 2 * np.random.rand(D, N) - 1
-            p.append(np.insert(w, np.shape(w)[1], 1.0, axis=1))
-        self.W.append(p)
+            w_tilde = np.insert(w, np.shape(w)[1], 1.0, axis=1)
+            self.W.append(w_tilde)
 
-        self.var.append([1.0 for i in range(M)])
-        self.eta.append(0.01)
+        self.var = [1.0 for i in range(M)]
+
+        self.eta = 1 / ((1 + lam) / 0.9999)
+
+        self.one = [random.random() for i in range(M)]
+        self.x = [2 * np.random.rand(N, 1) - 1 for i in range(M)]
+        self.y2 = [random.random() for i in range(M)]
+        self.xy = [random.random() for i in range(M)]
         
-        self.one.append([random.random() for i in range(M)])
-        self.x.append([2 * np.random.rand(N, 1) - 1 for i in range(M)])
-        self.y2.append([random.random() for i in range(M)])
-        self.xy.append([random.random() for i in range(M)])
-
         self.N = N
         self.D = D
         self.M = M
@@ -109,9 +105,8 @@ class NGnet_OEM:
         tmp = [x_t[j].item() for j in range(len(x_t))]
         tmp.append(1)
         x_tilde = np.array(tmp).reshape(-1, 1)
-        W = self.W[-1][i]
 
-        return W @ x_tilde
+        return self.W[i] @ x_tilde
     
 
     def online_learning(self, x_t, y_t):
@@ -136,15 +131,12 @@ class NGnet_OEM:
     # This function calculates equation (2.2)
     def calc_P_xyi(self, x_t, y_t, i):
 
-        mu = self.mu[-1][i]
-        Sigma = self.Sigma[-1][i]
-        
         # Equation (2.3b)
-        P_x = multivariate_normal.pdf(x_t.flatten(), mu.flatten(), Sigma)
+        P_x = multivariate_normal.pdf(x_t.flatten(), self.mu[i].flatten(), self.Sigma[i])
 
         # Equation (2.3c)
         diff = y_t.reshape(-1, 1) - self.linear_regression(x_t, i)
-        P_y = self.norm_pdf(diff, self.var[-1][i])
+        P_y = self.norm_pdf(diff, self.var[i])
 
         return (P_x * P_y) / self.M
 
@@ -165,34 +157,27 @@ class NGnet_OEM:
 
     def update_weighted_mean(self, x_t, y_t):
 
-        one, x, y2, xy = self.one[-1], self.x[-1], self.y2[-1], self.xy[-1]
-        posterior_i = self.posterior_i
-
-        eta = (1 + self.lam) / self.eta[-1]
-        self.eta.append(eta)
+        self.eta = (1 + self.lam) / self.eta
         
         tmp = [x_t[j].item() for j in range(len(x_t))]
         tmp.append(1)
         x_tilde = np.array(tmp).reshape(-1, 1)
-
-        p1, p2, p3, p4 = [], [], [], []
+        
         for i in range(self.M):
-            p1.append(one[i] + eta * (posterior_i[i] - one[i]))
-            p2.append(x[i] + eta * (x_t * posterior_i[i] - x[i]))
-            p3.append(y2[i] + eta * (y_t.T @ y_t * posterior_i[i] - y2[i]))
-            p4.append(xy[i] + eta * (x_tilde @ y_t.T * posterior_i[i] - xy[i]))
-        self.one.append(p1)
-        self.x.append(p2)
-        self.y2.append(p3)
-        self.xy.append(p4)
+            self.one[i] = self.one[i] + self.eta * (self.posterior_i[i] - self.one[i])
+            self.x[i] = self.x[i] + self.eta * (x_t * self.posterior_i[i] - self.x[i])
+            self.y2[i] = self.y2[i] + self.eta * (y_t.T @ y_t * self.posterior_i[i] - self.y2[i])
+            self.xy[i] = self.xy[i] + self.eta * (x_tilde * y_t.T * self.posterior_i[i] - self.xy[i])
 
-        if len(one) > 100:
-            del self.one[0]
-            del self.x[0]
-            del self.y2[0]
-            del self.xy[0]
-            del self.eta[0]
+        for i in range(self.M):
+            if np.any(np.isnan(self.x[i])):
+                self.x[i] = np.zeros((self.N, 1))
+            if np.any(np.isnan(self.y2[i])):
+                self.y2[i] = 0.0
+            if np.any(np.isnan(self.xy[i])):
+                self.xy[i] = 0.0
 
+            
     def update_mu(self):
         pass
             
@@ -208,7 +193,7 @@ if __name__ == '__main__':
     D = 1
     M = 20
 
-    lam = 0.01
+    lam = 0.998
     
     learning_T = 1000
     inference_T = 1000
@@ -226,7 +211,9 @@ if __name__ == '__main__':
     # Training NGnet
     for x_t, y_t in zip(learning_x_list, learning_y_list):
         ngnet.online_learning(x_t, y_t)
-    
+
+    pdb.set_trace()
+        
     # Inference the output y
     inference_x_list = []
     for t in range(inference_T):
