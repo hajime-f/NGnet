@@ -29,50 +29,44 @@ class NGnet_OEM:
     y2 = []
     xy = []
 
-    n_one = []
-    n_x = []
-    n_y2 = []
-    n_xy = []
-
-    eta = 0
+    eta = []
+    lam = 0
     
     posterior_i = []   # Posterior probability that the i-th unit is selected for each observation
     
-    def __init__(self, N, D, M, eta):
+    def __init__(self, N, D, M, lam):
+
+
+        self.mu.append([2 * np.random.rand(N, 1) - 1 for i in range(M)])
+
+        p = []
+        for i in range(M):
+            p.append(np.diag([random.random() for j in range(N + 1)]))
+        self.Lambda.append(p)
         
+        p = []
         for i in range(M):
-            self.mu.append(2 * np.random.rand(N, 1) - 1)
+            p.append(self.Lambda[0][i][0:N, 0:N])
+        self.Sigma.append(p)
 
-        for i in range(M):
-            self.Lambda.append(np.diag([random.random() for j in range(N + 1)]))
-            
-        for i in range(M):
-            self.Sigma.append(self.Lambda[i][0:N, 0:N])
-
+        p = []
         for i in range(M):
             w = 2 * np.random.rand(D, N) - 1
-            w_tilde = np.insert(w, np.shape(w)[1], 1.0, axis=1)
-            self.W.append(w_tilde)
+            p.append(np.insert(w, np.shape(w)[1], 1.0, axis=1))
+        self.W.append(p)
 
-        for i in range(M):
-            self.var.append(1.0)
+        self.var.append([1.0 for i in range(M)])
+        self.eta.append(0.01)
+        
+        self.one.append([random.random() for i in range(M)])
+        self.x.append([2 * np.random.rand(N, 1) - 1 for i in range(M)])
+        self.y2.append([random.random() for i in range(M)])
+        self.xy.append([random.random() for i in range(M)])
 
-        for i in range(M):
-            self.one.append(0.0)
-            self.x.append(0.0)
-            self.y2.append(0.0)
-            self.xy.append(0.0)
-
-        for i in range(M):
-            self.n_one.append(0.0)
-            self.n_x.append(0.0)
-            self.n_y2.append(0.0)
-            self.n_xy.append(0.0)
-            
         self.N = N
         self.D = D
         self.M = M
-        self.eta = eta
+        self.lam = lam
 
     
     ### The functions written below are to calculate the output y given the input x
@@ -110,15 +104,14 @@ class NGnet_OEM:
 
 
     # This function calculates W_i * x.
-    def linear_regression(self, x, i):
+    def linear_regression(self, x_t, i):
 
-        tmp = [x[j].item() for j in range(len(x))]
+        tmp = [x_t[j].item() for j in range(len(x_t))]
         tmp.append(1)
-        
         x_tilde = np.array(tmp).reshape(-1, 1)
-        Wx = self.W[i] @ x_tilde
+        W = self.W[-1][i]
 
-        return Wx
+        return W @ x_tilde
     
 
     def online_learning(self, x_t, y_t):
@@ -143,12 +136,15 @@ class NGnet_OEM:
     # This function calculates equation (2.2)
     def calc_P_xyi(self, x_t, y_t, i):
 
+        mu = self.mu[-1][i]
+        Sigma = self.Sigma[-1][i]
+        
         # Equation (2.3b)
-        P_x = multivariate_normal.pdf(x_t.flatten(), self.mu[i].flatten(), self.Sigma[i])
+        P_x = multivariate_normal.pdf(x_t.flatten(), mu.flatten(), Sigma)
 
         # Equation (2.3c)
         diff = y_t.reshape(-1, 1) - self.linear_regression(x_t, i)
-        P_y = self.norm_pdf(diff, self.var[i])
+        P_y = self.norm_pdf(diff, self.var[-1][i])
 
         return (P_x * P_y) / self.M
 
@@ -169,11 +165,37 @@ class NGnet_OEM:
 
     def update_weighted_mean(self, x_t, y_t):
 
+        one, x, y2, xy = self.one[-1], self.x[-1], self.y2[-1], self.xy[-1]
+        posterior_i = self.posterior_i
+
+        eta = (1 + self.lam) / self.eta[-1]
+        self.eta.append(eta)
+        
+        tmp = [x_t[j].item() for j in range(len(x_t))]
+        tmp.append(1)
+        x_tilde = np.array(tmp).reshape(-1, 1)
+
+        p1, p2, p3, p4 = [], [], [], []
         for i in range(self.M):
-            self.n_one[i] = self.one[i] + self.eta * (self.posterior_i[i] - self.one[i])
+            p1.append(one[i] + eta * (posterior_i[i] - one[i]))
+            p2.append(x[i] + eta * (x_t * posterior_i[i] - x[i]))
+            p3.append(y2[i] + eta * (y_t.T @ y_t * posterior_i[i] - y2[i]))
+            p4.append(xy[i] + eta * (x_tilde @ y_t.T * posterior_i[i] - xy[i]))
+        self.one.append(p1)
+        self.x.append(p2)
+        self.y2.append(p3)
+        self.xy.append(p4)
+
+        if len(one) > 100:
+            del self.one[0]
+            del self.x[0]
+            del self.y2[0]
+            del self.xy[0]
+            del self.eta[0]
+
+    def update_mu(self):
+        pass
             
-
-
     
 def func1(x_1, x_2):
     s = np.sqrt(np.power(x_1, 2) + np.power(x_2, 2))
@@ -186,12 +208,12 @@ if __name__ == '__main__':
     D = 1
     M = 20
 
-    eta = 0.01
+    lam = 0.01
     
     learning_T = 1000
     inference_T = 1000
     
-    ngnet = NGnet_OEM(N, D, M, eta)
+    ngnet = NGnet_OEM(N, D, M, lam)
 
     # Preparing for learning data
     learning_x_list = []
