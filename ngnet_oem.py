@@ -54,10 +54,10 @@ class NGnet_OEM:
 
         self.eta = 1 / ((1 + lam) / 0.9999)
 
-        self.one = [random.random() for i in range(M)]
+        self.one = [1.0 for i in range(M)]
         self.x = [2 * np.random.rand(N, 1) - 1 for i in range(M)]
-        self.y2 = [random.random() for i in range(M)]
-        self.xy = [random.random() for i in range(M)]
+        self.y2 = [1.0 for i in range(M)]
+        self.xy = [np.zeros((N+1, D)) for i in range(M)]
         
         self.N = N
         self.D = D
@@ -153,6 +153,8 @@ class NGnet_OEM:
     def M_step(self, x_t, y_t):
         
         self.update_weighted_mean(x_t, y_t)
+        self.update_mu()
+        self.update_var()
 
 
     def update_weighted_mean(self, x_t, y_t):
@@ -175,11 +177,20 @@ class NGnet_OEM:
             if np.any(np.isnan(self.y2[i])):
                 self.y2[i] = 0.0
             if np.any(np.isnan(self.xy[i])):
-                self.xy[i] = 0.0
+                self.xy[i] = np.zeros((self.N+1, self.D))
 
             
     def update_mu(self):
-        pass
+
+        for i in range(self.M):
+            self.mu[i] = self.x[i] / self.one[i]
+
+
+    def update_var(self):
+
+        for i in range(self.M):
+            self.var[i] = (1 / self.D) * (self.y2[i] - np.trace(self.W[i] @ self.xy[i])) / self.one[i]
+            
             
     
 def func1(x_1, x_2):
