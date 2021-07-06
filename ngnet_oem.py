@@ -50,14 +50,15 @@ class NGnet_OEM:
             w_tilde = np.insert(w, np.shape(w)[1], 1.0, axis=1)
             self.W.append(w_tilde)
 
-        self.var = [1.0 for i in range(M)]
+        self.var = [0.5 for i in range(M)]
 
         self.eta = 1 / ((1 + lam) / 0.9999)
 
         self.one = [1.0 for i in range(M)]
-        self.x = [np.zeros((N, 1)) for i in range(M)]
+        self.x = [np.ones((N, 1)) for i in range(M)]
         self.y2 = [1.0 for i in range(M)]
-        self.xy = [np.zeros((N+1, D)) for i in range(M)]
+        self.xy = [np.ones((N+1, D)) for i in range(M)]
+        # self.yWx = [1.0 for i in range(M)]
         
         self.N = N
         self.D = D
@@ -126,7 +127,7 @@ class NGnet_OEM:
         
         for i in range(self.M):
             self.posterior_i.append(p[i] / p_sum)
-        
+
 
     # This function calculates equation (2.2)
     def calc_P_xyi(self, x_t, y_t, i):
@@ -147,6 +148,7 @@ class NGnet_OEM:
         log_pdf1 = - self.D/2 * np.log(2 * np.pi)
         log_pdf2 = - self.D/2 * np.log(var)
         log_pdf3 = - (1/(2 * var)) * (diff.T @ diff)
+        
         return np.exp(log_pdf1 + log_pdf2 + log_pdf3)
 
     
@@ -165,12 +167,14 @@ class NGnet_OEM:
         tmp = [x_t[j].item() for j in range(len(x_t))]
         tmp.append(1)
         x_tilde = np.array(tmp).reshape(-1, 1)
-        
+
         for i in range(self.M):
             self.one[i] = self.one[i] + self.eta * (self.posterior_i[i] - self.one[i])
             self.x[i] = self.x[i] + self.eta * (x_t * self.posterior_i[i] - self.x[i])
             self.y2[i] = self.y2[i] + self.eta * (y_t.T @ y_t * self.posterior_i[i] - self.y2[i])
             self.xy[i] = self.xy[i] + self.eta * (x_tilde * y_t.T * self.posterior_i[i] - self.xy[i])
+            # diff = y_t - self.linear_regression(x_t, i).T
+            # self.yWx[i] = self.yWx[i] + self.eta * ((diff @ diff.T) * self.posterior_i[i] - self.yWx[i])
 
         for i in range(self.M):
             if np.any(np.isnan(self.x[i])):
@@ -206,7 +210,10 @@ class NGnet_OEM:
     def update_var(self):
 
         for i in range(self.M):
-            self.var[i] = (1 / self.D) * (self.y2[i] - np.trace(self.W[i] @ self.xy[i])) / self.one[i]
+            # self.var[i] = (1 / self.D) * (self.yWx[i] / self.one[i])
+            self.var[i] = (self.y2[i] - np.trace(self.W[i] @ self.xy[i])) / (self.one[i] * self.D)
+            if self.var[i] < 0:
+                pdb.set_trace()
             
             
     
@@ -214,11 +221,15 @@ def func1(x_1, x_2):
     s = np.sqrt(np.power(x_1, 2) + np.power(x_2, 2))
     return np.sin(s) / s
 
+def func2(x_1, x_2, x_3):
+    s = np.sqrt(np.power(x_1, 2) + np.power(x_2, 2))
+    return [np.sin(s).item() / s.item(), (1.0 - np.sin(s)).item() / s.item()]
+
 
 if __name__ == '__main__':
 
-    N = 2
-    D = 1
+    N = 3
+    D = 2
     M = 20
 
     lam = 0.998
@@ -234,7 +245,8 @@ if __name__ == '__main__':
         learning_x_list.append(20 * np.random.rand(N, 1) - 10)
     learning_y_list = []
     for x_t in learning_x_list:
-        learning_y_list.append(np.array(func1(x_t[0], x_t[1])))
+        y = func2(x_t[0], x_t[1], x_t[2])
+        learning_y_list.append(np.array(y))
     
     # Training NGnet
     for x_t, y_t in zip(learning_x_list, learning_y_list):

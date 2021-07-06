@@ -228,8 +228,8 @@ class NGnet:
             sum_diff = 0
             for t, (x_t, y_t) in enumerate(zip(x_list, y_list)):
                 sum_1 += self.posterior_i[t][i]
-                diff = y_t - self.linear_regression(x_t, i)
-                sum_diff += (diff.T @ diff) * self.posterior_i[t][i]
+                diff = y_t - self.linear_regression(x_t, i).T
+                sum_diff += (diff @ diff.T) * self.posterior_i[t][i]
             self.var[i] = (1/self.D) * (sum_diff / sum_1)
 
 
