@@ -14,15 +14,15 @@ import pdb
 
 class NGnet_OEM:
 
-    mu = []      # Center vectors of N-dimensional Gaussian functions
-    Sigma = []   # Covariance matrices of N-dimensional Gaussian functions
-    Lambda = []  # Auxiliary variable to calculate covariance matrix Sigma
-    W = []       # Linear regression matrices in units
-    var = []     # Variance of D-dimensional Gaussian functions
+    mu = []        # Center vectors of N-dimensional Gaussian functions
+    Sigma_inv = [] # Inverse matrices of covariance of N-dimensional Gaussian functions
+    Lambda = []    # Auxiliary variable to calculate covariance matrix Sigma
+    W = []         # Linear regression matrices in units
+    var = []       # Variance of D-dimensional Gaussian functions
     
-    N = 0        # Dimension of input data
-    D = 0        # Dimension of output data
-    M = 0        # Number of units
+    N = 0  # Dimension of input data
+    D = 0  # Dimension of output data
+    M = 0  # Number of units
 
     one = []
     x = []
@@ -43,20 +43,20 @@ class NGnet_OEM:
             self.Lambda.append(np.diag([random.random() for j in range(N + 1)]))
 
         for i in range(M):
-            self.Sigma.append(self.Lambda[i][0:N, 0:N])
+            self.Sigma_inv.append(self.Lambda[i][0:N, 0:N])
 
         for i in range(M):
             w = 2 * np.random.rand(D, N) - 1
             w_tilde = np.insert(w, np.shape(w)[1], 1.0, axis=1)
             self.W.append(w_tilde)
 
-        self.var = [0.5 for i in range(M)]
+        self.var = [np.array(0.5) for i in range(M)]
 
         self.eta = 1 / ((1 + lam) / 0.9999)
 
-        self.one = [1.0 for i in range(M)]
+        self.one = [np.array(0.3) for i in range(M)]
         self.x = [np.ones((N, 1)) for i in range(M)]
-        self.y2 = [1.0 for i in range(M)]
+        self.y2 = [np.array(1.0) for i in range(M)]
         self.xy = [np.ones((N+1, D)) for i in range(M)]
         # self.yWx = [1.0 for i in range(M)]
         
@@ -89,15 +89,26 @@ class NGnet_OEM:
         # Denominator of equation (2.1b)
         sum_g_j = 0
         for j in range(self.M):
-            sum_g_j += multivariate_normal.pdf(x.flatten(), self.mu[j].flatten(), self.Sigma[j])
+            sum_g_j += self.multinorm_pdf(x.flatten(), self.mu[j].flatten(), self.Sigma_inv[j])
 
         # Numerator of equation (2.1b)
-        g_i = multivariate_normal.pdf(x.flatten(), self.mu[i].flatten(), self.Sigma[i])
+        g_i = self.multinorm_pdf(x.flatten(), self.mu[i].flatten(), self.Sigma_inv[i])
 
         # Equation (2.1b)
         N_i = g_i / sum_g_j
         
-        return N_i        
+        return N_i
+
+
+    # This function calculates multivariate Gaussian G(x) according to equation (2.1c)
+    def multinorm_pdf(self, x, mean, covinv):
+        
+        Nlog2pi = self.N * np.log(2 * np.pi)
+        logdet = np.log(1 / LA.det(covinv))
+        diff = x - mean
+
+        logpdf = -0.5 * (Nlog2pi + logdet + (diff.T @ covinv @ diff))
+        return np.exp(logpdf)    
 
 
     # This function calculates W_i * x.
@@ -133,7 +144,7 @@ class NGnet_OEM:
     def calc_P_xyi(self, x_t, y_t, i):
 
         # Equation (2.3b)
-        P_x = multivariate_normal.pdf(x_t.flatten(), self.mu[i].flatten(), self.Sigma[i])
+        P_x = self.multinorm_pdf(x_t.flatten(), self.mu[i].flatten(), self.Sigma_inv[i])
 
         # Equation (2.3c)
         diff = y_t.reshape(-1, 1) - self.linear_regression(x_t, i)
@@ -156,8 +167,9 @@ class NGnet_OEM:
         
         self.update_weighted_mean(x_t, y_t)
         self.update_mu()
-        # self.update_Lambda(x_t)
-        self.update_var()
+        self.update_Lambda(x_t)
+        self.update_Sigma_inv()
+        # self.update_var()
 
 
     def update_weighted_mean(self, x_t, y_t):
@@ -171,18 +183,18 @@ class NGnet_OEM:
         for i in range(self.M):
             self.one[i] = self.one[i] + self.eta * (self.posterior_i[i] - self.one[i])
             self.x[i] = self.x[i] + self.eta * (x_t * self.posterior_i[i] - self.x[i])
-            self.y2[i] = self.y2[i] + self.eta * (y_t.T @ y_t * self.posterior_i[i] - self.y2[i])
-            self.xy[i] = self.xy[i] + self.eta * (x_tilde * y_t.T * self.posterior_i[i] - self.xy[i])
+            self.y2[i] = self.y2[i] + self.eta * (y_t @ y_t.reshape(-1, 1) * self.posterior_i[i] - self.y2[i])
+            self.xy[i] = self.xy[i] + self.eta * (x_tilde @ y_t.reshape(-1, 2) * self.posterior_i[i] - self.xy[i])
             # diff = y_t - self.linear_regression(x_t, i).T
             # self.yWx[i] = self.yWx[i] + self.eta * ((diff @ diff.T) * self.posterior_i[i] - self.yWx[i])
 
-        for i in range(self.M):
-            if np.any(np.isnan(self.x[i])):
-                self.x[i] = np.zeros((self.N, 1))
-            if np.any(np.isnan(self.y2[i])):
-                self.y2[i] = 0.0
-            if np.any(np.isnan(self.xy[i])):
-                self.xy[i] = np.zeros((self.N+1, self.D))
+        # for i in range(self.M):
+        #     if np.any(np.isnan(self.x[i])):
+        #         self.x[i] = np.zeros((self.N, 1))
+        #     if np.any(np.isnan(self.y2[i])):
+        #         self.y2[i] = 0.0
+        #     if np.any(np.isnan(self.xy[i])):
+        #         self.xy[i] = np.zeros((self.N+1, self.D))
 
             
     def update_mu(self):
@@ -205,6 +217,14 @@ class NGnet_OEM:
             denominator = (1 / self.eta) - 1 + self.posterior_i[i] * x_tilde.T @ self.Lambda[i] @ x_tilde
 
             self.Lambda[i] = (1 / (1 - self.eta)) * (self.Lambda[i] - numerator / denominator)
+        # pdb.set_trace()
+
+
+    def update_Sigma_inv(self):
+        
+        for i in range(self.M):
+            self.Sigma_inv[i] = self.Lambda[i][0:self.N, 0:self.N] * self.one[i]
+        
             
 
     def update_var(self):
