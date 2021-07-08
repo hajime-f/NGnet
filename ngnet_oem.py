@@ -31,10 +31,11 @@ class NGnet_OEM:
 
     eta = []
     lam = 0
+    alpha = 0
     
     posterior_i = []   # Posterior probability that the i-th unit is selected for each observation
     
-    def __init__(self, N, D, M, lam):
+    def __init__(self, N, D, M, lam, alpha):
 
 
         self.mu = [2 * np.random.rand(N, 1) - 1 for i in range(M)]
@@ -64,6 +65,7 @@ class NGnet_OEM:
         self.D = D
         self.M = M
         self.lam = lam
+        self.alpha = alpha
 
     
     ### The functions written below are to calculate the output y given the input x
@@ -105,6 +107,8 @@ class NGnet_OEM:
         
         Nlog2pi = self.N * np.log(2 * np.pi)
         logdet = np.log(1 / LA.det(covinv))
+        if np.isnan(logdet):
+            pdb.set_trace()
         diff = x - mean
 
         logpdf = -0.5 * (Nlog2pi + logdet + (diff.T @ covinv @ diff))
@@ -168,6 +172,7 @@ class NGnet_OEM:
         self.update_weighted_mean(x_t, y_t)
         self.update_mu()
         self.update_Lambda(x_t)
+        self.regularization()
         self.update_Sigma_inv()
         # self.update_var()
 
@@ -214,12 +219,27 @@ class NGnet_OEM:
             t1 = self.Lambda[i] @ x_tilde
             t2 = x_tilde.T @ self.Lambda[i]
             numerator = self.posterior_i[i] * t1 @ t2
-            denominator = (1 / self.eta) - 1 + self.posterior_i[i] * x_tilde.T @ self.Lambda[i] @ x_tilde
+            denominator = (1 / self.eta) - 1 + self.posterior_i[i] * t2 @ x_tilde
 
             self.Lambda[i] = (1 / (1 - self.eta)) * (self.Lambda[i] - numerator / denominator)
-        # pdb.set_trace()
+        pdb.set_trace()
 
+        
+    def regularization(self):
 
+        nu = np.ones((N+1, 1)) * self.alpha
+        
+        for i in range(self.M):
+
+            t1 = self.Lambda[i] @ nu
+            t2 = nu.T @ self.Lambda[i]
+            t3 = self.eta * self.posterior_i[i]
+            k = t3 / (1 + t3 * t2 @ nu)
+            self.Lambda[i] = self.Lambda[i] - k * t1 @ t2
+
+        pdb.set_trace()
+            
+            
     def update_Sigma_inv(self):
         
         for i in range(self.M):
@@ -250,14 +270,15 @@ if __name__ == '__main__':
 
     N = 3
     D = 2
-    M = 20
+    M = 15
 
     lam = 0.998
+    alpha = 0.1
     
     learning_T = 1000
     inference_T = 1000
     
-    ngnet = NGnet_OEM(N, D, M, lam)
+    ngnet = NGnet_OEM(N, D, M, lam, alpha)
 
     # Preparing for learning data
     learning_x_list = []
