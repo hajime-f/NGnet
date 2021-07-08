@@ -34,9 +34,9 @@ class NGnet_OEM:
     alpha = 0
     Nlog2pi = 0
 
-    itr_step = 0
-    
     posterior_i = []   # Posterior probability that the i-th unit is selected for each observation
+
+    data_num = 0
     
     def __init__(self, N, D, M, lam, alpha):
 
@@ -137,7 +137,7 @@ class NGnet_OEM:
         self.E_step(x_t, y_t)
         self.M_step(x_t, y_t)
 
-        self.itr_step += 1
+        self.data_num += 1
 
 
     def E_step(self, x_t, y_t):
@@ -146,9 +146,13 @@ class NGnet_OEM:
         for i in range(self.M):
             p.append(self.calc_P_xyi(x_t, y_t, i).item())
         p_sum = sum(p)
-        
-        for i in range(self.M):
-            self.posterior_i.append(p[i] / p_sum)
+
+        try:
+            for i in range(self.M):
+                self.posterior_i.append(p[i] / p_sum)
+        except:
+            for i in range(self.M):
+                self.posterior_i.append(0.0)
 
 
     # This function calculates equation (2.2)
@@ -185,14 +189,15 @@ class NGnet_OEM:
         self.update_weighted_mean(x_t, y_t)
         self.update_mu()
         self.update_Lambda(x_t)
-        self.regularization()
+        # self.regularization()
         self.update_Sigma_inv()
         # self.update_var()
 
 
     def update_weighted_mean(self, x_t, y_t):
 
-        self.eta = (1 + self.lam) / self.eta
+        # self.eta = (1 + self.lam) / self.eta
+        self.eta = 0.5
         
         tmp = [x_t[j].item() for j in range(len(x_t))]
         tmp.append(1)
