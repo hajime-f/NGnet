@@ -32,6 +32,9 @@ class NGnet_OEM:
     eta = []
     lam = 0
     alpha = 0
+    Nlog2pi = 0
+
+    itr_step = 0
     
     posterior_i = []   # Posterior probability that the i-th unit is selected for each observation
     
@@ -66,6 +69,7 @@ class NGnet_OEM:
         self.M = M
         self.lam = lam
         self.alpha = alpha
+        self.Nlog2pi = N * np.log(2 * np.pi)
 
     
     ### The functions written below are to calculate the output y given the input x
@@ -91,10 +95,10 @@ class NGnet_OEM:
         # Denominator of equation (2.1b)
         sum_g_j = 0
         for j in range(self.M):
-            sum_g_j += self.multinorm_pdf(x.flatten(), self.mu[j].flatten(), self.Sigma_inv[j])
+            sum_g_j += self.multinorm_pdf(x, self.mu[j], self.Sigma_inv[j])
 
         # Numerator of equation (2.1b)
-        g_i = self.multinorm_pdf(x.flatten(), self.mu[i].flatten(), self.Sigma_inv[i])
+        g_i = self.multinorm_pdf(x, self.mu[i], self.Sigma_inv[i])
 
         # Equation (2.1b)
         N_i = g_i / sum_g_j
@@ -105,13 +109,14 @@ class NGnet_OEM:
     # This function calculates multivariate Gaussian G(x) according to equation (2.1c)
     def multinorm_pdf(self, x, mean, covinv):
         
-        Nlog2pi = self.N * np.log(2 * np.pi)
-        logdet = np.log(1 / LA.det(covinv))
-        if np.isnan(logdet):
-            pdb.set_trace()
+        logdet = - np.log(LA.det(covinv))
         diff = x - mean
 
-        logpdf = -0.5 * (Nlog2pi + logdet + (diff.T @ covinv @ diff))
+        logpdf = -0.5 * (self.Nlog2pi + logdet + (diff.T @ covinv @ diff))
+
+        if np.isnan(logdet):
+            pdb.set_trace()
+        
         return np.exp(logpdf)    
 
 
@@ -132,6 +137,8 @@ class NGnet_OEM:
         self.E_step(x_t, y_t)
         self.M_step(x_t, y_t)
 
+        self.itr_step += 1
+
 
     def E_step(self, x_t, y_t):
 
@@ -147,14 +154,20 @@ class NGnet_OEM:
     # This function calculates equation (2.2)
     def calc_P_xyi(self, x_t, y_t, i):
 
+        # Equation (2.3a)
+        P_i = 1 / self.M
+        
         # Equation (2.3b)
-        P_x = self.multinorm_pdf(x_t.flatten(), self.mu[i].flatten(), self.Sigma_inv[i])
+        P_x = self.multinorm_pdf(x_t, self.mu[i], self.Sigma_inv[i])
 
         # Equation (2.3c)
         diff = y_t.reshape(-1, 1) - self.linear_regression(x_t, i)
         P_y = self.norm_pdf(diff, self.var[i])
 
-        return (P_x * P_y) / self.M
+        # Equation (2.2)
+        P_xyi = P_i * P_x * P_y
+        
+        return P_xyi
 
 
     # This function calculates normal function according to equation (2.3c)
@@ -222,7 +235,7 @@ class NGnet_OEM:
             denominator = (1 / self.eta) - 1 + self.posterior_i[i] * t2 @ x_tilde
 
             self.Lambda[i] = (1 / (1 - self.eta)) * (self.Lambda[i] - numerator / denominator)
-        pdb.set_trace()
+        # pdb.set_trace()
 
         
     def regularization(self):
@@ -237,7 +250,7 @@ class NGnet_OEM:
             k = t3 / (1 + t3 * t2 @ nu)
             self.Lambda[i] = self.Lambda[i] - k * t1 @ t2
 
-        pdb.set_trace()
+        # pdb.set_trace()
             
             
     def update_Sigma_inv(self):
