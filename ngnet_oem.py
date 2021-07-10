@@ -62,7 +62,6 @@ class NGnet_OEM:
         self.x = [np.ones((N, 1)) for i in range(M)]
         self.y2 = [np.array(1.0) for i in range(M)]
         self.xy = [np.ones((N+1, D)) for i in range(M)]
-        # self.yWx = [1.0 for i in range(M)]
         
         self.N = N
         self.D = D
@@ -147,12 +146,8 @@ class NGnet_OEM:
             p.append(self.calc_P_xyi(x_t, y_t, i).item())
         p_sum = sum(p)
 
-        try:
-            for i in range(self.M):
-                self.posterior_i.append(p[i] / p_sum)
-        except:
-            for i in range(self.M):
-                self.posterior_i.append(0.0)
+        for i in range(self.M):
+            self.posterior_i.append(p[i] / p_sum)
 
 
     # This function calculates equation (2.2)
@@ -190,7 +185,7 @@ class NGnet_OEM:
         self.update_mu()
         self.update_Lambda(x_t)
         # self.regularization()
-        self.update_Sigma_inv()
+        # self.update_Sigma_inv()
         # self.update_var()
 
 
@@ -204,20 +199,10 @@ class NGnet_OEM:
         x_tilde = np.array(tmp).reshape(-1, 1)
 
         for i in range(self.M):
-            self.one[i] = self.one[i] + self.eta * (self.posterior_i[i] - self.one[i])
-            self.x[i] = self.x[i] + self.eta * (x_t * self.posterior_i[i] - self.x[i])
-            self.y2[i] = self.y2[i] + self.eta * (y_t @ y_t.reshape(-1, 1) * self.posterior_i[i] - self.y2[i])
-            self.xy[i] = self.xy[i] + self.eta * (x_tilde @ y_t.reshape(-1, 2) * self.posterior_i[i] - self.xy[i])
-            # diff = y_t - self.linear_regression(x_t, i).T
-            # self.yWx[i] = self.yWx[i] + self.eta * ((diff @ diff.T) * self.posterior_i[i] - self.yWx[i])
-
-        # for i in range(self.M):
-        #     if np.any(np.isnan(self.x[i])):
-        #         self.x[i] = np.zeros((self.N, 1))
-        #     if np.any(np.isnan(self.y2[i])):
-        #         self.y2[i] = 0.0
-        #     if np.any(np.isnan(self.xy[i])):
-        #         self.xy[i] = np.zeros((self.N+1, self.D))
+            self.one[i] = self.one[i] + self.eta * (self.posterior_i[i] - self.one[i])   # scalar
+            self.x[i] = self.x[i] + self.eta * (x_t * self.posterior_i[i] - self.x[i])   # (N x 1)-dimensional vector
+            self.y2[i] = self.y2[i] + self.eta * (y_t @ y_t.reshape(-1, 1) * self.posterior_i[i] - self.y2[i])  # scalar
+            self.xy[i] = self.xy[i] + self.eta * (x_tilde @ y_t.reshape(-1, 2) * self.posterior_i[i] - self.xy[i])  # ((N+1) x D)-dimensional matrix
 
             
     def update_mu(self):
@@ -236,12 +221,11 @@ class NGnet_OEM:
             
             t1 = self.Lambda[i] @ x_tilde
             t2 = x_tilde.T @ self.Lambda[i]
-            numerator = self.posterior_i[i] * t1 @ t2
-            denominator = (1 / self.eta) - 1 + self.posterior_i[i] * t2 @ x_tilde
-
+            numerator = self.posterior_i[i] * (t1 @ t2)   # ((N+1) x (N+1))-dimensional matrix
+            denominator = (1 / self.eta) - 1 + self.posterior_i[i] * (t2 @ x_tilde)   # scalar
+            
             self.Lambda[i] = (1 / (1 - self.eta)) * (self.Lambda[i] - numerator / denominator)
-        # pdb.set_trace()
-
+            
         
     def regularization(self):
 
@@ -255,8 +239,6 @@ class NGnet_OEM:
             k = t3 / (1 + t3 * t2 @ nu)
             self.Lambda[i] = self.Lambda[i] - k * t1 @ t2
 
-        # pdb.set_trace()
-            
             
     def update_Sigma_inv(self):
         
@@ -268,7 +250,6 @@ class NGnet_OEM:
     def update_var(self):
 
         for i in range(self.M):
-            # self.var[i] = (1 / self.D) * (self.yWx[i] / self.one[i])
             self.var[i] = (self.y2[i] - np.trace(self.W[i] @ self.xy[i])) / (self.one[i] * self.D)
             if self.var[i] < 0:
                 pdb.set_trace()
