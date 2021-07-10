@@ -146,8 +146,12 @@ class NGnet_OEM:
             p.append(self.calc_P_xyi(x_t, y_t, i).item())
         p_sum = sum(p)
 
-        for i in range(self.M):
-            self.posterior_i.append(p[i] / p_sum)
+        try:
+            for i in range(self.M):
+                self.posterior_i.append(p[i] / p_sum)
+        except:
+            for i in range(self.M):
+                self.posterior_i.append(0.0)
 
 
     # This function calculates equation (2.2)
@@ -184,7 +188,7 @@ class NGnet_OEM:
         self.update_weighted_mean(x_t, y_t)
         self.update_mu()
         self.update_Lambda(x_t)
-        # self.regularization()
+        self.regularization()
         # self.update_Sigma_inv()
         # self.update_var()
 
@@ -229,7 +233,9 @@ class NGnet_OEM:
         
     def regularization(self):
 
-        nu = np.ones((N+1, 1)) * self.alpha
+        tmp = [self.alpha for j in range(self.N)]
+        tmp.append(1)
+        nu = np.array(tmp).reshape(-1, 1)
         
         for i in range(self.M):
 
