@@ -37,6 +37,8 @@ class NGnet_OEM:
     posterior_i = []   # Posterior probability that the i-th unit is selected for each observation
 
     data_num = 0
+    x_list = []
+    y_list = []
     
     def __init__(self, N, D, M, lam, alpha):
 
@@ -137,21 +139,24 @@ class NGnet_OEM:
         self.M_step(x_t, y_t)
 
         self.data_num += 1
+        self.x_list.append(x_t)
+        self.y_list.append(y_t)
+        print(self.calc_log_likelihood())
 
 
     def E_step(self, x_t, y_t):
-
+        
         p = []
         for i in range(self.M):
             p.append(self.calc_P_xyi(x_t, y_t, i).item())
         p_sum = sum(p)
 
-        try:
-            for i in range(self.M):
-                self.posterior_i.append(p[i] / p_sum)
-        except:
-            for i in range(self.M):
-                self.posterior_i.append(0.0)
+        # try:
+        for i in range(self.M):
+            self.posterior_i.append(p[i] / p_sum)
+        # except:
+        #     for i in range(self.M):
+        #         self.posterior_i.append(0.0)
 
 
     # This function calculates equation (2.2)
@@ -187,9 +192,10 @@ class NGnet_OEM:
         
         self.update_weighted_mean(x_t, y_t)
         self.update_mu()
-        self.update_Lambda(x_t)
-        self.regularization()
+        # self.update_Lambda(x_t)
+        # self.regularization()
         # self.update_Sigma_inv()
+        # self.update_W(x_t, y_t)
         # self.update_var()
 
 
@@ -251,7 +257,18 @@ class NGnet_OEM:
         for i in range(self.M):
             self.Sigma_inv[i] = self.Lambda[i][0:self.N, 0:self.N] * self.one[i]
         
+
+    def update_W(self, x_t, y_t):
+
+        tmp = [x_t[j].item() for j in range(len(x_t))]
+        tmp.append(1)
+        x_tilde = np.array(tmp).reshape(-1, 1)
+        
+        for i in range(self.M):
             
+            diff = y_t.reshape(-1, 1) - self.linear_regression(x_t, i)
+            self.W[i] = self.W[i] + self.eta * self.posterior_i[i] * (diff @ x_tilde.T @ self.Lambda[i])
+        
 
     def update_var(self):
 
@@ -259,7 +276,19 @@ class NGnet_OEM:
             self.var[i] = (self.y2[i] - np.trace(self.W[i] @ self.xy[i])) / (self.one[i] * self.D)
             if self.var[i] < 0:
                 pdb.set_trace()
-            
+
+
+    # This function calculates the log likelihood according to equation (3.3)
+    def calc_log_likelihood(self):
+
+        log_likelihood = 0
+        for x_t, y_t in zip(self.x_list, self.y_list):
+            p_t = 0
+            for i in range(self.M):
+                p_t += self.calc_P_xyi(x_t, y_t, i)
+            log_likelihood += np.log(p_t)
+
+        return log_likelihood.item()
             
     
 def func1(x_1, x_2):
