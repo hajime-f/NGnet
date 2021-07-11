@@ -39,9 +39,9 @@ class NGnet_OEM:
     data_num = 0
     x_list = []
     y_list = []
+    previous_likelihood = -10**6
     
     def __init__(self, N, D, M, lam, alpha):
-
 
         self.mu = [2 * np.random.rand(N, 1) - 1 for i in range(M)]
 
@@ -72,6 +72,12 @@ class NGnet_OEM:
         self.alpha = alpha
         self.Nlog2pi = N * np.log(2 * np.pi)
 
+
+    def set_eval_data(self, x_list, y_list):
+        
+        self.x_list = x_list
+        self.y_list = y_list
+    
     
     ### The functions written below are to calculate the output y given the input x
         
@@ -139,8 +145,6 @@ class NGnet_OEM:
         self.M_step(x_t, y_t)
 
         self.data_num += 1
-        self.x_list.append(x_t)
-        self.y_list.append(y_t)
         print(self.calc_log_likelihood())
 
 
@@ -287,6 +291,9 @@ class NGnet_OEM:
             for i in range(self.M):
                 p_t += self.calc_P_xyi(x_t, y_t, i)
             log_likelihood += np.log(p_t)
+        if self.previous_likelihood >= log_likelihood:
+            print('*** Warning: likelihood decreases!')
+        self.previous_likelihood = log_likelihood
 
         return log_likelihood.item()
             
@@ -310,6 +317,7 @@ if __name__ == '__main__':
     alpha = 0.1
     
     learning_T = 1000
+    eval_T = 300
     inference_T = 1000
     
     ngnet = NGnet_OEM(N, D, M, lam, alpha)
@@ -322,6 +330,16 @@ if __name__ == '__main__':
     for x_t in learning_x_list:
         y = func2(x_t[0], x_t[1], x_t[2])
         learning_y_list.append(np.array(y))
+
+    # Preparing for evaluation data of likelihood
+    eval_x_list = []
+    for t in range(eval_T):
+        eval_x_list.append(20 * np.random.rand(N, 1) - 10)
+    eval_y_list = []
+    for x_t in eval_x_list:
+        y = func2(x_t[0], x_t[1], x_t[2])
+        eval_y_list.append(np.array(y))
+    ngnet.set_eval_data(eval_x_list, eval_y_list)
     
     # Training NGnet
     for x_t, y_t in zip(learning_x_list, learning_y_list):
