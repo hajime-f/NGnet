@@ -1,4 +1,3 @@
-from scipy.stats import multivariate_normal
 import numpy as np
 import numpy.linalg as LA
 import random
@@ -155,12 +154,8 @@ class NGnet_OEM:
             p.append(self.calc_P_xyi(x_t, y_t, i).item())
         p_sum = sum(p)
 
-        # try:
         for i in range(self.M):
             self.posterior_i.append(p[i] / p_sum)
-        # except:
-        #     for i in range(self.M):
-        #         self.posterior_i.append(0.0)
 
 
     # This function calculates equation (2.2)
@@ -171,7 +166,7 @@ class NGnet_OEM:
         
         # Equation (2.3b)
         P_x = self.multinorm_pdf(x_t, self.mu[i], self.Sigma_inv[i])
-
+        
         # Equation (2.3c)
         diff = y_t.reshape(-1, 1) - self.linear_regression(x_t, i)
         P_y = self.norm_pdf(diff, self.var[i])
@@ -331,7 +326,7 @@ if __name__ == '__main__':
         y = func2(x_t[0], x_t[1], x_t[2])
         learning_y_list.append(np.array(y))
 
-    # Preparing for evaluation data of likelihood
+    # Preparing for evaluation data to evaluate the log likelihood
     eval_x_list = []
     for t in range(eval_T):
         eval_x_list.append(20 * np.random.rand(N, 1) - 10)
