@@ -43,7 +43,7 @@ class NGnet_OEM:
     y_list = []
     previous_likelihood = -10**6
     
-    def __init__(self, N, D, M, lam, alpha):
+    def __init__(self, N, D, M, lam=0.998, alpha=0.1):
 
         self.mu = [2 * np.random.rand(N, 1) - 1 for i in range(M)]
 
@@ -62,7 +62,7 @@ class NGnet_OEM:
 
         self.eta = 1 / ((1 + lam) / 0.9999)
 
-        self.one = [np.array(0.3) for i in range(M)]
+        self.one = [np.array(0.01) for i in range(M)]
         self.x = [np.ones((N, 1)) for i in range(M)]
         self.y2 = [np.array(1.0) for i in range(M)]
         self.xy = [np.ones((N+1, D)) for i in range(M)]
@@ -211,16 +211,16 @@ class NGnet_OEM:
 
     def update_weighted_mean(self, x_t, y_t):
 
-        self.eta = (1 + self.lam) / self.eta
-        # self.eta = 0.5
+        # self.eta = (1 + self.lam) / self.eta
+        self.eta = 0.5
         
         x_tilde = self.generate_x_tilde(x_t)        
 
         for i in range(self.M):
             self.one[i] = self.one[i] + self.eta * (self.posterior_i[i] - self.one[i])   # scalar <<1>>
             self.x[i] = self.x[i] + self.eta * (x_t * self.posterior_i[i] - self.x[i])   # (N x 1)-dimensional vector <<x>>
-            # self.y2[i] = self.y2[i] + self.eta * (y_t.T @ y_t * self.posterior_i[i] - self.y2[i])  # scalar <<y^2>>
-            # self.xy[i] = self.xy[i] + self.eta * (x_tilde @ y_t.T * self.posterior_i[i] - self.xy[i])  # ((N+1) x D)-dimensional matrix <<xy>>
+            self.y2[i] = self.y2[i] + self.eta * (y_t.T @ y_t * self.posterior_i[i] - self.y2[i])  # scalar <<y^2>>
+            self.xy[i] = self.xy[i] + self.eta * (x_tilde @ y_t.T * self.posterior_i[i] - self.xy[i])  # ((N+1) x D)-dimensional matrix <<xy>>
 
             
     def update_mu(self):
@@ -311,8 +311,8 @@ def func2(x_1, x_2, x_3):
 
 if __name__ == '__main__':
 
-    N = 3
-    D = 2
+    N = 2
+    D = 1
     M = 15
 
     lam = 0.998
@@ -330,16 +330,16 @@ if __name__ == '__main__':
         learning_x_list.append(20 * np.random.rand(N, 1) - 10)
     learning_y_list = []
     for x_t in learning_x_list:
-        y = func2(x_t[0], x_t[1], x_t[2])
+        y = func1(x_t[0], x_t[1])
         learning_y_list.append(y)
-
+    
     # Preparing for evaluation data to evaluate the log likelihood
     eval_x_list = []
     for t in range(eval_T):
         eval_x_list.append(20 * np.random.rand(N, 1) - 10)
     eval_y_list = []
     for x_t in eval_x_list:
-        y = func2(x_t[0], x_t[1], x_t[2])
+        y = func1(x_t[0], x_t[1])
         eval_y_list.append(y)
     ngnet.set_eval_data(eval_x_list, eval_y_list)
     
