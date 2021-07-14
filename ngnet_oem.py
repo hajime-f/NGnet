@@ -16,7 +16,8 @@ import pdb
 class NGnet_OEM:
 
     mu = []        # Center vectors of N-dimensional Gaussian functions
-    Sigma_inv = [] # Inverse matrices of covariance of N-dimensional Gaussian functions
+    Sigma = []     # Covariance matrices of N-dimensional Gaussian functions
+    Sigma_inv = [] # Inverse matrices of the above covariance matrices of N-dimensional Gaussian functions
     Lambda = []    # Auxiliary variable to calculate covariance matrix Sigma
     W = []         # Linear regression matrices in units
     var = []       # Variance of D-dimensional Gaussian functions
@@ -39,8 +40,8 @@ class NGnet_OEM:
     posterior_i = []   # Posterior probability that the i-th unit is selected for each observation
 
     data_num = 0
-    x_list = []
-    y_list = []
+    eval_x_list = []
+    eval_y_list = []
     previous_likelihood = -10**6
     
     def __init__(self, N, D, M, lam=0.998, alpha=0.1):
@@ -48,11 +49,9 @@ class NGnet_OEM:
         self.mu = [2 * np.random.rand(N, 1) - 1 for i in range(M)]
 
         for i in range(M):
-            self.Lambda.append(np.diag([random.random() for j in range(N + 1)]))
-
-        for i in range(M):
-            self.Sigma_inv.append(self.Lambda[i][0:N, 0:N])
-
+            x = [random.random() for i in range(N)]
+            self.Sigma.append(np.diag(x))
+        
         for i in range(M):
             w = 2 * np.random.rand(D, N) - 1
             w_tilde = np.insert(w, np.shape(w)[1], 1.0, axis=1)
@@ -75,11 +74,11 @@ class NGnet_OEM:
         self.Nlog2pi = N * np.log(2 * np.pi)
         self.Dlog2pi = D * np.log(2 * np.pi)
 
-
+        
     def set_eval_data(self, x_list, y_list):
         
-        self.x_list = x_list
-        self.y_list = y_list
+        self.eval_x_list = x_list
+        self.eval_y_list = y_list
     
     
     ### The functions written below are to calculate the output y given the input x
@@ -147,6 +146,140 @@ class NGnet_OEM:
         return self.W[i] @ x_tilde
     
 
+    def batch_learning(self, x_list, y_list):
+        
+        if len(x_list) != len(y_list):
+            print('Error: The number of input vectors x is not equal to the number of output vectors y.')
+            exit()
+        else:
+            self.T = len(x_list)
+
+        self.posterior_i = []
+        self.batch_E_step(x_list, y_list)
+        self.batch_M_step(x_list, y_list)
+        
+    
+    # This function executes E-step written by equation (3.1)
+    def batch_E_step(self, x_list, y_list):
+
+        for x_t, y_t in zip(x_list, y_list):
+            sum_p = 0
+            for i in range(self.M):
+                sum_p += self.batch_calc_P_xyi(x_t, y_t, i)
+            p_t = []
+            for i in range(self.M):
+                p = self.batch_calc_P_xyi(x_t, y_t, i)
+                p_t.append(p / sum_p)
+            self.posterior_i.append(p_t)
+
+
+    # This function calculates equation (2.2)
+    def batch_calc_P_xyi(self, x_t, y_t, i):
+
+        # Equation (2.3a)
+        P_i = 1 / self.M
+        
+        # Equation (2.3b)
+        P_x = self.batch_multinorm_pdf(x_t, self.mu[i], self.Sigma[i])
+        
+        # Equation (2.3c)
+        diff = y_t - self.linear_regression(x_t, i)
+        P_y = self.norm_pdf(diff, self.var[i])
+
+        # Equation (2.2)
+        P_xyi = P_i * P_x * P_y   # Joint Probability of i, x and y
+        
+        return P_xyi
+
+
+    def batch_multinorm_pdf(self, x, mean, cov):
+        
+        logdet = np.log(LA.det(cov))
+        diff = x - mean
+
+        logpdf = -0.5 * (self.Nlog2pi + logdet + (diff.T @ cov @ diff))
+        
+        return np.exp(logpdf)
+    
+
+    # This function executes M-step written by equation (3.4)
+    def batch_M_step(self, x_list, y_list):
+        
+        self.batch_Sigma_update(x_list)
+        self.batch_mu_update(x_list)
+        self.batch_W_update(x_list, y_list)
+        self.batch_var_update(x_list, y_list)
+            
+
+    # This function updates mu according to equation (3.4a)
+    def batch_mu_update(self, x_list):
+
+        for i in range(self.M):
+            sum_1 = 0
+            sum_mu = 0
+            for t, x_t in enumerate(x_list):
+                sum_1 += self.posterior_i[t][i]
+                sum_mu += x_t.T * self.posterior_i[t][i]
+            self.mu[i] = (sum_mu / sum_1).T
+
+
+    # This function updates Sigma according to equation (3.4b)
+    def batch_Sigma_update(self, x_list):
+
+        for i in range(self.M):
+            sum_1 = 0
+            sum_diff = 0
+            for t, x_t in enumerate(x_list):
+                sum_1 += self.posterior_i[t][i]
+                diff = x_t - self.mu[i]
+                sum_diff += (diff @ diff.T) * self.posterior_i[t][i]
+            self.Sigma[i] = sum_diff / sum_1
+            
+
+    # This function updates W according to equation (3.4c)
+    def batch_W_update(self, x_list, y_list):
+
+        alpha_I = np.diag([0.00001 for i in range(self.N+1)])   # Regularization matrix
+        for i, W_i in enumerate(self.W):
+            sum_xx = 0
+            sum_yx = 0
+            for t, (x_t, y_t) in enumerate(zip(x_list, y_list)):
+                x_tilde = np.insert(x_t, len(x_t), 1.0).reshape(-1, 1)
+                sum_xx += (x_tilde * x_tilde.T * self.posterior_i[t][i]) / self.T
+                sum_yx += (y_t * x_tilde.T * self.posterior_i[t][i]) / self.T
+            self.W[i] = sum_yx @ LA.inv(sum_xx + alpha_I)
+
+
+    # This function updates var according to equation (3.4d)
+    def batch_var_update(self, x_list, y_list):
+        
+        for i, var_i in enumerate(self.var):
+            sum_1 = 0
+            sum_diff = 0
+            for t, (x_t, y_t) in enumerate(zip(x_list, y_list)):
+                sum_1 += self.posterior_i[t][i]
+                diff = y_t - self.linear_regression(x_t, i).T
+                sum_diff += (diff @ diff.T) * self.posterior_i[t][i]
+            self.var[i] = (1/self.D) * (sum_diff / sum_1)
+
+
+    # This function calculates the log likelihood according to equation (3.3)
+    def batch_calc_log_likelihood(self):
+
+        log_likelihood = 0
+        for x_t, y_t in zip(self.eval_x_list, self.eval_y_list):
+            p_t = 0
+            for i in range(self.M):
+                p_t += self.batch_calc_P_xyi(x_t, y_t, i)
+            log_likelihood += np.log(p_t)
+            
+        return log_likelihood.item()
+
+
+
+
+    
+    
     def online_learning(self, x_t, y_t):
 
         self.posterior_i = []
@@ -209,12 +342,11 @@ class NGnet_OEM:
         # self.update_var()
 
 
+    # This function updates weighted means according to equation (4.2)
     def update_weighted_mean(self, x_t, y_t):
 
-        # self.eta = (1 + self.lam) / self.eta
-        self.eta = 0.5
-        
-        x_tilde = self.generate_x_tilde(x_t)        
+        self.eta = (1 + self.lam) / self.eta
+        x_tilde = self.generate_x_tilde(x_t)
 
         for i in range(self.M):
             self.one[i] = self.one[i] + self.eta * (self.posterior_i[i] - self.one[i])   # scalar <<1>>
@@ -222,13 +354,15 @@ class NGnet_OEM:
             self.y2[i] = self.y2[i] + self.eta * (y_t.T @ y_t * self.posterior_i[i] - self.y2[i])  # scalar <<y^2>>
             self.xy[i] = self.xy[i] + self.eta * (x_tilde @ y_t.T * self.posterior_i[i] - self.xy[i])  # ((N+1) x D)-dimensional matrix <<xy>>
 
-            
+
+    # This function updates mu according to equation (4.5a)
     def update_mu(self):
         
         for i in range(self.M):
             self.mu[i] = self.x[i] / self.one[i]
             
 
+    # This function updates Lambda according to equation (4.6a)
     def update_Lambda(self, x_t):
         
         x_tilde = self.generate_x_tilde(x_t)        
@@ -242,7 +376,8 @@ class NGnet_OEM:
             
             self.Lambda[i] = (1 / (1 - self.eta)) * (self.Lambda[i] - numerator / denominator)
             
-        
+
+    # This function regularizes Lambda according to equation (5.12)
     def regularization(self):
 
         tmp = [self.alpha for j in range(self.N)]
@@ -257,13 +392,15 @@ class NGnet_OEM:
             k = t3 / (1 + t3 * t2 @ nu)
             self.Lambda[i] = self.Lambda[i] - k * t1 @ t2
 
-            
+
+    # This function picks up the inverse of Sigma from Lambda according to equation (4.7)
     def update_Sigma_inv(self):
         
         for i in range(self.M):
             self.Sigma_inv[i] = self.Lambda[i][0:self.N, 0:self.N] * self.one[i]
         
 
+    # This function updates W according to equation (4.8)
     def update_W(self, x_t, y_t):
 
         x_tilde = self.generate_x_tilde(x_t)
@@ -274,6 +411,7 @@ class NGnet_OEM:
             self.W[i] = self.W[i] + self.eta * self.posterior_i[i] * (diff @ x_tilde.T @ self.Lambda[i])
         
 
+    # This function updates variance according to equation (4.5d)
     def update_var(self):
 
         for i in range(self.M):
@@ -282,6 +420,8 @@ class NGnet_OEM:
                 pdb.set_trace()
 
 
+
+                
     # This function calculates the log likelihood according to equation (3.3)
     def calc_log_likelihood(self):
 
@@ -315,15 +455,39 @@ if __name__ == '__main__':
     D = 1
     M = 15
 
-    lam = 0.998
-    alpha = 0.1
+    pt_T = 1000
     
     learning_T = 1000
     eval_T = 300
     inference_T = 1000
     
-    ngnet = NGnet_OEM(N, D, M, lam, alpha)
+    ngnet = NGnet_OEM(N, D, M)
 
+    # Preparing for pre-training data
+    pt_x_list = [20 * np.random.rand(N, 1) - 10 for _ in range(pt_T)]
+    pt_y_list = [func1(x_t[0], x_t[1]) for x_t in pt_x_list]
+
+    # Preparing for evaluation data to evaluate the log likelihood
+    eval_x_list = [20 * np.random.rand(N, 1) - 10 for _ in range(eval_T)]
+    eval_y_list = [func1(x_t[0], x_t[1]) for x_t in pt_x_list]
+    ngnet.set_eval_data(eval_x_list, eval_y_list)
+    
+    # Training NGnet to initialize parameters
+    previous_likelihood = -10 ** 6
+    next_likelihood = -10 ** 5
+    while abs(next_likelihood - previous_likelihood) > 5:
+        ngnet.batch_learning(pt_x_list, pt_y_list)
+        previous_likelihood = next_likelihood
+        next_likelihood = ngnet.batch_calc_log_likelihood()
+        print(next_likelihood)
+        if previous_likelihood >= next_likelihood:
+            print('Warning: Next likelihood is smaller than previous.')
+
+    exit()
+    
+    
+    
+    
     # Preparing for learning data
     learning_x_list = []
     for t in range(learning_T):
