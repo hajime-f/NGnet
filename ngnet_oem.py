@@ -34,6 +34,7 @@ class NGnet_OEM:
     lam = 0
     alpha = 0
     Nlog2pi = 0
+    Dlog2pi = 0
 
     posterior_i = []   # Posterior probability that the i-th unit is selected for each observation
 
@@ -196,12 +197,6 @@ class NGnet_OEM:
 
         return np.exp(-0.5 * (self.Dlog2pi + log_pdf1 + log_pdf2))
         
-        # log_pdf1 = - self.D/2 * np.log(2 * np.pi)
-        # log_pdf2 = - self.D/2 * np.log(var)
-        # log_pdf3 = - (1/(2 * var)) * (diff.T @ diff)
-        
-        # return np.exp(log_pdf1 + log_pdf2 + log_pdf3)
-
     
     def M_step(self, x_t, y_t):
         
