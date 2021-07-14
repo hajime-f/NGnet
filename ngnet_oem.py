@@ -72,6 +72,7 @@ class NGnet_OEM:
         self.lam = lam
         self.alpha = alpha
         self.Nlog2pi = N * np.log(2 * np.pi)
+        self.Dlog2pi = D * np.log(2 * np.pi)
 
 
     def set_eval_data(self, x_list, y_list):
@@ -126,14 +127,21 @@ class NGnet_OEM:
             pdb.set_trace()
         
         return np.exp(logpdf)    
+    
 
-
-    # This function calculates W_i * x.
-    def linear_regression(self, x_t, i):
-
+    def generate_x_tilde(self, x_t):
+        
         tmp = [x_t[j].item() for j in range(len(x_t))]
         tmp.append(1)
         x_tilde = np.array(tmp).reshape(-1, 1)
+        
+        return x_tilde
+    
+    
+    # This function calculates W_i * x.
+    def linear_regression(self, x_t, i):
+
+        x_tilde = self.generate_x_tilde(x_t)
 
         return self.W[i] @ x_tilde
     
@@ -171,7 +179,7 @@ class NGnet_OEM:
         P_x = self.multinorm_pdf(x_t, self.mu[i], self.Sigma_inv[i])
         
         # Equation (2.3c)
-        diff = y_t.reshape(-1, 1) - self.linear_regression(x_t, i)
+        diff = y_t - self.linear_regression(x_t, i)
         P_y = self.norm_pdf(diff, self.var[i])
 
         # Equation (2.2)
@@ -183,11 +191,16 @@ class NGnet_OEM:
     # This function calculates normal function according to equation (2.3c)
     def norm_pdf(self, diff, var):
         
-        log_pdf1 = - self.D/2 * np.log(2 * np.pi)
-        log_pdf2 = - self.D/2 * np.log(var)
-        log_pdf3 = - (1/(2 * var)) * (diff.T @ diff)
+        log_pdf1 = self.D * np.log(var)
+        log_pdf2 = (1 / var) * (diff.T @ diff)
         
-        return np.exp(log_pdf1 + log_pdf2 + log_pdf3)
+        return np.exp(-0.5 * (self.Dlog2pi + log_pdf1 + log_pdf2))
+        
+        # log_pdf1 = - self.D/2 * np.log(2 * np.pi)
+        # log_pdf2 = - self.D/2 * np.log(var)
+        # log_pdf3 = - (1/(2 * var)) * (diff.T @ diff)
+        
+        # return np.exp(log_pdf1 + log_pdf2 + log_pdf3)
 
     
     def M_step(self, x_t, y_t):
@@ -206,15 +219,13 @@ class NGnet_OEM:
         self.eta = (1 + self.lam) / self.eta
         # self.eta = 0.5
         
-        tmp = [x_t[j].item() for j in range(len(x_t))]
-        tmp.append(1)
-        x_tilde = np.array(tmp).reshape(-1, 1)
+        x_tilde = self.generate_x_tilde(x_t)        
 
         for i in range(self.M):
-            self.one[i] = self.one[i] + self.eta * (self.posterior_i[i] - self.one[i])   # scalar
-            self.x[i] = self.x[i] + self.eta * (x_t * self.posterior_i[i] - self.x[i])   # (N x 1)-dimensional vector
-            self.y2[i] = self.y2[i] + self.eta * (y_t @ y_t.reshape(-1, 1) * self.posterior_i[i] - self.y2[i])  # scalar
-            self.xy[i] = self.xy[i] + self.eta * (x_tilde @ y_t.reshape(-1, 2) * self.posterior_i[i] - self.xy[i])  # ((N+1) x D)-dimensional matrix
+            self.one[i] = self.one[i] + self.eta * (self.posterior_i[i] - self.one[i])   # scalar <<1>>
+            self.x[i] = self.x[i] + self.eta * (x_t * self.posterior_i[i] - self.x[i])   # (N x 1)-dimensional vector <<x>>
+            # self.y2[i] = self.y2[i] + self.eta * (y_t.T @ y_t * self.posterior_i[i] - self.y2[i])  # scalar <<y^2>>
+            # self.xy[i] = self.xy[i] + self.eta * (x_tilde @ y_t.T * self.posterior_i[i] - self.xy[i])  # ((N+1) x D)-dimensional matrix <<xy>>
 
             
     def update_mu(self):
@@ -225,9 +236,7 @@ class NGnet_OEM:
 
     def update_Lambda(self, x_t):
         
-        tmp = [x_t[j].item() for j in range(len(x_t))]
-        tmp.append(1)
-        x_tilde = np.array(tmp).reshape(-1, 1)
+        x_tilde = self.generate_x_tilde(x_t)        
 
         for i in range(self.M):
             
@@ -262,9 +271,7 @@ class NGnet_OEM:
 
     def update_W(self, x_t, y_t):
 
-        tmp = [x_t[j].item() for j in range(len(x_t))]
-        tmp.append(1)
-        x_tilde = np.array(tmp).reshape(-1, 1)
+        x_tilde = self.generate_x_tilde(x_t)
         
         for i in range(self.M):
             
@@ -298,11 +305,13 @@ class NGnet_OEM:
     
 def func1(x_1, x_2):
     s = np.sqrt(np.power(x_1, 2) + np.power(x_2, 2))
-    return np.sin(s) / s
+    y = np.sin(s) / s
+    return np.array(y).reshape(-1, 1)
 
 def func2(x_1, x_2, x_3):
     s = np.sqrt(np.power(x_1, 2) + np.power(x_2, 2))
-    return [np.sin(s).item() / s.item(), (1.0 - np.sin(s)).item() / s.item()]
+    y = [np.sin(s).item() / s.item(), (1.0 - np.sin(s)).item() / s.item()]
+    return np.array(y).reshape(-1, 1)
 
 
 if __name__ == '__main__':
@@ -327,7 +336,7 @@ if __name__ == '__main__':
     learning_y_list = []
     for x_t in learning_x_list:
         y = func2(x_t[0], x_t[1], x_t[2])
-        learning_y_list.append(np.array(y))
+        learning_y_list.append(y)
 
     # Preparing for evaluation data to evaluate the log likelihood
     eval_x_list = []
@@ -336,7 +345,7 @@ if __name__ == '__main__':
     eval_y_list = []
     for x_t in eval_x_list:
         y = func2(x_t[0], x_t[1], x_t[2])
-        eval_y_list.append(np.array(y))
+        eval_y_list.append(y)
     ngnet.set_eval_data(eval_x_list, eval_y_list)
     
     # Training NGnet
