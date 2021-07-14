@@ -122,7 +122,7 @@ class NGnet_OEM:
         diff = x - mean
 
         logpdf = -0.5 * (self.Nlog2pi - logdet + (diff.T @ covinv @ diff))
-
+        
         if np.isnan(logdet):
             pdb.set_trace()
         
@@ -193,7 +193,7 @@ class NGnet_OEM:
         
         log_pdf1 = self.D * np.log(var)
         log_pdf2 = (1 / var) * (diff.T @ diff)
-        
+
         return np.exp(-0.5 * (self.Dlog2pi + log_pdf1 + log_pdf2))
         
         # log_pdf1 = - self.D/2 * np.log(2 * np.pi)
