@@ -3,7 +3,9 @@ import numpy.linalg as LA
 import random
 import pdb
 
-# This code is the implementation of the Normalized Gaussian Network (NGnet)
+# This code is the implementation of the Normalized Gaussian Network (NGnet) with
+# online EM algorithm.
+
 # In the details, see the article shown below.
 
 # Masa-aki Sato & Shin Ishii
@@ -115,10 +117,10 @@ class NGnet_OEM:
     # This function calculates multivariate Gaussian G(x) according to equation (2.1c)
     def multinorm_pdf(self, x, mean, covinv):
         
-        logdet = - np.log(LA.det(covinv))
+        logdet = np.log(LA.det(covinv))
         diff = x - mean
 
-        logpdf = -0.5 * (self.Nlog2pi + logdet + (diff.T @ covinv @ diff))
+        logpdf = -0.5 * (self.Nlog2pi - logdet + (diff.T @ covinv @ diff))
 
         if np.isnan(logdet):
             pdb.set_trace()
@@ -147,6 +149,7 @@ class NGnet_OEM:
         print(self.calc_log_likelihood())
 
 
+    # This function executes E-step written by equation (3.1)
     def E_step(self, x_t, y_t):
         
         p = []
@@ -172,7 +175,7 @@ class NGnet_OEM:
         P_y = self.norm_pdf(diff, self.var[i])
 
         # Equation (2.2)
-        P_xyi = P_i * P_x * P_y
+        P_xyi = P_i * P_x * P_y   # Joint Probability of i, x and y
         
         return P_xyi
 
@@ -200,8 +203,8 @@ class NGnet_OEM:
 
     def update_weighted_mean(self, x_t, y_t):
 
-        # self.eta = (1 + self.lam) / self.eta
-        self.eta = 0.5
+        self.eta = (1 + self.lam) / self.eta
+        # self.eta = 0.5
         
         tmp = [x_t[j].item() for j in range(len(x_t))]
         tmp.append(1)
@@ -215,10 +218,10 @@ class NGnet_OEM:
 
             
     def update_mu(self):
-
+        
         for i in range(self.M):
             self.mu[i] = self.x[i] / self.one[i]
-
+            
 
     def update_Lambda(self, x_t):
         

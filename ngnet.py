@@ -6,12 +6,7 @@ import numpy.linalg as LA
 import random, pdb
 
 # This code is the implementation of the Normalized Gaussian Network (NGnet)
-# In the details, see the article shown below.
-
-# Masa-aki Sato & Shin Ishii
-# On-line EM Algorithm for the Normalized Gaussian Network
-# Neural Computation, 2000 Vol.12, pp.407-432, 2000
-# https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.37.3704&rep=rep1&type=pdf
+# with batch EM algorithm.
 
 class NGnet:
     
