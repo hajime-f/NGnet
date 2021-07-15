@@ -38,11 +38,7 @@ class NGnet_OEM:
     Dlog2pi = 0
 
     posterior_i = []   # Posterior probability that the i-th unit is selected for each observation
-
-    data_num = 0
-    eval_x_list = []
-    eval_y_list = []
-    previous_likelihood = -10**6
+    
     
     def __init__(self, N, D, M, lam=0.998, alpha=0.1):
 
@@ -75,12 +71,6 @@ class NGnet_OEM:
         self.Dlog2pi = D * np.log(2 * np.pi)
 
         
-    def set_eval_data(self, x_list, y_list):
-        
-        self.eval_x_list = x_list
-        self.eval_y_list = y_list
-    
-    
     ### The functions written below are to calculate the output y given the input x
         
     # This function returns the output y corresponding the input x according to equation (2.1a)
@@ -192,12 +182,17 @@ class NGnet_OEM:
         return P_xyi
 
 
+    # This function calculates equation (2.1c)
     def batch_multinorm_pdf(self, x, mean, cov):
+
+        alpha_I = np.diag([0.00001 for _ in range(self.N)])
+        cov = cov + alpha_I
         
         logdet = np.log(LA.det(cov))
+        covinv = LA.inv(cov)
         diff = x - mean
 
-        logpdf = -0.5 * (self.Nlog2pi + logdet + (diff.T @ cov @ diff))
+        logpdf = -0.5 * (self.Nlog2pi + logdet + (diff.T @ covinv @ diff))
         
         return np.exp(logpdf)
     
@@ -264,33 +259,42 @@ class NGnet_OEM:
 
 
     # This function calculates the log likelihood according to equation (3.3)
-    def batch_calc_log_likelihood(self):
+    def batch_calc_log_likelihood(self, x_list, y_list):
 
         log_likelihood = 0
-        for x_t, y_t in zip(self.eval_x_list, self.eval_y_list):
+        for x_t, y_t in zip(x_list, y_list):
             p_t = 0
             for i in range(self.M):
                 p_t += self.batch_calc_P_xyi(x_t, y_t, i)
             log_likelihood += np.log(p_t)
             
         return log_likelihood.item()
-
-
-
-
     
     
     def online_learning(self, x_t, y_t):
 
+        self.set_Sigma_Lambda()
+
         self.posterior_i = []
-        
         self.E_step(x_t, y_t)
         self.M_step(x_t, y_t)
 
-        self.data_num += 1
-        print(self.calc_log_likelihood())
 
+    def set_Sigma_Lambda(self):
 
+        alpha_I = np.diag([0.00001 for _ in range(self.N)])
+        for i in range(self.M):
+            self.Sigma_inv.append(LA.inv(self.Sigma[i] + alpha_I))
+
+        for i in range(self.M):
+            u1 = - self.Sigma_inv[i] @ self.mu[i]
+            u2 = - self.mu[i].T @ self.Sigma_inv[i]
+            u3 = 1 + self.mu[i].T @ self.Sigma_inv[i] @ self.mu[i]
+            t1 = np.concatenate([self.Sigma_inv[i], u1], 1)
+            t2 = np.concatenate([u2, u3], 1)
+            self.Lambda.append(np.concatenate([t1, t2], 0))
+        
+        
     # This function executes E-step written by equation (3.1)
     def E_step(self, x_t, y_t):
         
@@ -455,10 +459,8 @@ if __name__ == '__main__':
     D = 1
     M = 15
 
-    pt_T = 1000
-    
+    pt_T = 300
     learning_T = 1000
-    eval_T = 300
     inference_T = 1000
     
     ngnet = NGnet_OEM(N, D, M)
@@ -467,35 +469,27 @@ if __name__ == '__main__':
     pt_x_list = [20 * np.random.rand(N, 1) - 10 for _ in range(pt_T)]
     pt_y_list = [func1(x_t[0], x_t[1]) for x_t in pt_x_list]
 
-    # Preparing for evaluation data to evaluate the log likelihood
-    eval_x_list = [20 * np.random.rand(N, 1) - 10 for _ in range(eval_T)]
-    eval_y_list = [func1(x_t[0], x_t[1]) for x_t in pt_x_list]
-    ngnet.set_eval_data(eval_x_list, eval_y_list)
-    
     # Training NGnet to initialize parameters
     previous_likelihood = -10 ** 6
     next_likelihood = -10 ** 5
     while abs(next_likelihood - previous_likelihood) > 5:
         ngnet.batch_learning(pt_x_list, pt_y_list)
         previous_likelihood = next_likelihood
-        next_likelihood = ngnet.batch_calc_log_likelihood()
+        next_likelihood = ngnet.batch_calc_log_likelihood(pt_x_list, pt_y_list)
         print(next_likelihood)
         if previous_likelihood >= next_likelihood:
-            print('Warning: Next likelihood is smaller than previous.')
+            print('*** Warning: likelihood decreases!')
 
-    exit()
-    
-    
-    
-    
     # Preparing for learning data
-    learning_x_list = []
-    for t in range(learning_T):
-        learning_x_list.append(20 * np.random.rand(N, 1) - 10)
-    learning_y_list = []
-    for x_t in learning_x_list:
-        y = func1(x_t[0], x_t[1])
-        learning_y_list.append(y)
+    learning_x_list = [20 * np.random.rand(N, 1) - 10 for _ in range(learning_T)]
+    learning_y_list = [func1(x_t[0], x_t[1]) for x_t in learning_x_list]
+    
+    # Training NGnet
+    for x_t, y_t in zip(learning_x_list, learning_y_list):
+        ngnet.online_learning(x_t, y_t)
+    
+    
+    
     
     # Preparing for evaluation data to evaluate the log likelihood
     eval_x_list = []
