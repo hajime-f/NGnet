@@ -38,8 +38,7 @@ class NGnet_OEM:
     Dlog2pi = 0
 
     posterior_i = []   # Posterior probability that the i-th unit is selected for each observation
-    
-    
+
     def __init__(self, N, D, M, lam=0.998, alpha=0.1):
 
         self.mu = [2 * np.random.rand(N, 1) - 1 for i in range(M)]
@@ -273,8 +272,6 @@ class NGnet_OEM:
     
     def online_learning(self, x_t, y_t):
 
-        self.set_Sigma_Lambda()
-
         self.posterior_i = []
         self.E_step(x_t, y_t)
         self.M_step(x_t, y_t)
@@ -339,17 +336,18 @@ class NGnet_OEM:
         
         self.update_weighted_mean(x_t, y_t)
         self.update_mu()
-        # self.update_Lambda(x_t)
-        # self.regularization()
-        # self.update_Sigma_inv()
-        # self.update_W(x_t, y_t)
+        self.update_Lambda(x_t)
+        self.regularization()
+        self.update_Sigma_inv()
+        self.update_W(x_t, y_t)
         # self.update_var()
 
 
     # This function updates weighted means according to equation (4.2)
     def update_weighted_mean(self, x_t, y_t):
 
-        self.eta = (1 + self.lam) / self.eta
+        # self.eta = (1 + self.lam) / self.eta
+        self.eta = 0.5
         x_tilde = self.generate_x_tilde(x_t)
 
         for i in range(self.M):
@@ -423,24 +421,17 @@ class NGnet_OEM:
             if self.var[i] < 0:
                 pdb.set_trace()
 
-
-
-                
+    
     # This function calculates the log likelihood according to equation (3.3)
-    def calc_log_likelihood(self):
+    def calc_log_likelihood(self, x_t, y_t):
 
-        log_likelihood = 0
-        for x_t, y_t in zip(self.x_list, self.y_list):
-            p_t = 0
-            for i in range(self.M):
-                p_t += self.calc_P_xyi(x_t, y_t, i)
-            log_likelihood += np.log(p_t)
-        if self.previous_likelihood >= log_likelihood:
-            print('*** Warning: likelihood decreases!')
-        self.previous_likelihood = log_likelihood
-
+        p_t = 0
+        for i in range(self.M):
+            p_t += self.calc_P_xyi(x_t, y_t, i)
+        log_likelihood = np.log(p_t)
+        
         return log_likelihood.item()
-            
+    
     
 def func1(x_1, x_2):
     s = np.sqrt(np.power(x_1, 2) + np.power(x_2, 2))
@@ -480,15 +471,17 @@ if __name__ == '__main__':
         if previous_likelihood >= next_likelihood:
             print('*** Warning: likelihood decreases!')
 
+    ngnet.set_Sigma_Lambda()
+
     # Preparing for learning data
     learning_x_list = [20 * np.random.rand(N, 1) - 10 for _ in range(learning_T)]
     learning_y_list = [func1(x_t[0], x_t[1]) for x_t in learning_x_list]
     
-    # Training NGnet
+    # Online training NGnet
     for x_t, y_t in zip(learning_x_list, learning_y_list):
         ngnet.online_learning(x_t, y_t)
     
-    
+    exit()
     
     
     # Preparing for evaluation data to evaluate the log likelihood
