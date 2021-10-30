@@ -280,7 +280,9 @@ if __name__ == '__main__':
     learning_y_list = []
     for x_t in learning_x_list:
         learning_y_list.append(np.array(func1(x_t[0], x_t[1])))
-
+        
+    pdb.set_trace()
+        
     # Training NGnet
     previous_likelihood = -10 ** 6
     next_likelihood = -10 ** 5

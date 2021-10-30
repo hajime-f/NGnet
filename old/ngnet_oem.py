@@ -459,7 +459,10 @@ if __name__ == '__main__':
     # Preparing for pre-training data
     pt_x_list = [20 * np.random.rand(N, 1) - 10 for _ in range(pt_T)]
     pt_y_list = [func1(x_t[0], x_t[1]) for x_t in pt_x_list]
-
+    
+    pdb.set_trace()
+    
+    
     # Training NGnet to initialize parameters
     previous_likelihood = -10 ** 6
     next_likelihood = -10 ** 5
