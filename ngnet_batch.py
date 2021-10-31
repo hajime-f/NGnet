@@ -211,17 +211,7 @@ class NGnet:
         return log_likelihood.item()
 
     
-def func1(x):
-    
-    x1, x2, x3 = x
-    
-    y1 = math.sin(x1) + math.sin(x2)
-    y2 = math.sin(x2) - math.sin(x3)
-    
-    return np.array([y1, y2]).reshape(-1, 1)
-
-
-def func2(x1, x2):
+def func(x1, x2):
 
     s = np.sqrt(np.power(x1, 2) + np.power(x2, 2))
     return np.sin(s) / s
@@ -231,7 +221,7 @@ if __name__ == '__main__':
     
     N = 2
     D = 1
-    M = 20
+    M = 15
     learning_T = 1000
     inference_T = 1000
     
@@ -240,12 +230,10 @@ if __name__ == '__main__':
     # Preparing for learning data
     learning_x_list = []
     for t in range(learning_T):
-        # learning_x_list.append(2 * math.pi * np.random.rand(N, 1))
         learning_x_list.append(20 * np.random.rand(N, 1) - 10)
     learning_y_list = []
     for x_t in learning_x_list:
-        # learning_y_list.append(func1(x_t))
-        learning_y_list.append(func2(x_t[0], x_t[1]))
+        learning_y_list.append(func(x_t[0], x_t[1]))
         
     # Training NGnet
     previous_likelihood = -10 ** 6
@@ -261,7 +249,6 @@ if __name__ == '__main__':
     # Inference the output y
     inference_x_list = []
     for t in range(inference_T):
-        # inference_x_list.append(2 * math.pi * np.random.rand(N, 1))
         inference_x_list.append(20 * np.random.rand(N, 1) - 10)
     inference_y_list = []
     for x_t in inference_x_list:
@@ -283,7 +270,7 @@ if __name__ == '__main__':
     x2_real = np.arange(-10.0, 10.0, 0.02)
 
     X1_real, X2_real = np.meshgrid(x1_real, x2_real)
-    Y1_real = func2(X1_real, X2_real)
+    Y1_real = func(X1_real, X2_real)
 
     fig = plt.figure()
     ax = Axes3D(fig)
