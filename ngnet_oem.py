@@ -1,3 +1,4 @@
+from scipy.stats import multivariate_normal
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
 import numpy as np
@@ -13,6 +14,9 @@ class NGnet:
     var = []    # Variance of D-dimensional Gaussian functions
     posterior_i = []   # Posterior probability that the i-th unit is selected for each observation
 
+    Sigma_inv = [] # Inverse matrices of the above covariance matrices of N-dimensional Gaussian functions
+    Lambda = []    # Auxiliary variable to calculate covariance matrix Sigma
+    
     N = 0       # Dimension of input data
     D = 0       # Dimension of output data
     M = 0       # Number of units
@@ -66,10 +70,10 @@ class NGnet:
         # Denominator of equation (2.1b)
         sum_g_j = 0
         for j in range(self.M):
-            sum_g_j += self.multinorm_pdf(x, self.mu[j], self.Sigma[j])
+            sum_g_j += multivariate_normal.pdf(x.flatten(), self.mu[j].flatten(), self.Sigma[j])
 
         # Numerator of equation (2.1b)
-        g_i = self.multinorm_pdf(x, self.mu[i], self.Sigma[i])
+        g_i = multivariate_normal.pdf(x.flatten(), self.mu[i].flatten(), self.Sigma[i])
 
         # Equation (2.1b)
         N_i = g_i / sum_g_j
@@ -77,22 +81,6 @@ class NGnet:
         return N_i
 
 
-    # This function calculates multivariate Gaussian G(x) according to equation (2.1c)
-    def multinorm_pdf(self, x, mean, cov):
-
-        cov_alpha = cov + np.diag([0.00001 for i in range(self.N)])
-        
-        Nlog2pi = self.N * np.log(2 * np.pi)
-        logdet = np.log(LA.det(cov_alpha))
-        covinv = LA.inv(cov_alpha)
-        
-        diff = x - mean
-
-        logpdf = -0.5 * (Nlog2pi + logdet + (diff.T @ covinv @ diff))
-
-        return np.exp(logpdf)
-
-    
     # This function calculates W_i * x.
     def linear_regression(self, x, i):
 
@@ -140,30 +128,18 @@ class NGnet:
         P_i = 1 / self.M
 
         # Equation (2.3b)
-        P_x = self.multinorm_pdf(x, self.mu[i], self.Sigma[i]).item()
-        
+        P_x = multivariate_normal.pdf(x.flatten(), self.mu[i].flatten(), self.Sigma[i])
+
         # Equation (2.3c)
-        diff = y.reshape(-1, 1) - self.linear_regression(x, i)
-        tmp = self.norm_pdf(diff, self.var[i])
-        if np.size(tmp) > 1:
-            pdb.set_trace()
-        P_y = self.norm_pdf(diff, self.var[i]).item()
+        mu = self.linear_regression(x, i)
+        P_y = multivariate_normal.pdf(y.flatten(), mu.flatten(), self.var[i])
         
         # Equation (2.2)
         P_xyi = P_i * P_x * P_y
 
         return P_xyi
 
-    
-    # This function calculates normal function according to equation (2.3c)
-    def norm_pdf(self, diff, var):
-        
-        log_pdf1 = - self.D/2 * np.log(2 * np.pi)
-        log_pdf2 = - self.D/2 * np.log(var)
-        log_pdf3 = - (1/(2 * var)) * (diff.T @ diff)
-        return np.exp(log_pdf1 + log_pdf2 + log_pdf3)
 
-    
     # This function executes M-step written by equation (3.4)
     def batch_M_step(self, x_list, y_list):
         
@@ -220,8 +196,8 @@ class NGnet:
             sum_diff = 0
             for t, (x_t, y_t) in enumerate(zip(x_list, y_list)):
                 sum_1 += self.posterior_i[t][i]
-                diff = y_t.reshape(-1, 1) - self.linear_regression(x_t, i)
-                sum_diff += (diff.T @ diff) * self.posterior_i[t][i]
+                diff = y_t - self.linear_regression(x_t, i).T
+                sum_diff += (diff @ diff.T) * self.posterior_i[t][i]
             self.var[i] = (1/self.D) * (sum_diff / sum_1)
         
 
@@ -237,20 +213,20 @@ class NGnet:
 
         return log_likelihood.item()
 
+
+    def initialize_parameters(self):
+
+        alpha_I = np.diag([0.00001 for _ in range(self.N)])
+        for i in range(self.M):
+            self.Sigma_inv.append(LA.inv(self.Sigma[i] + alpha_I))
+        
+
     
 def func(x1, x2):
 
     s = np.sqrt(np.power(x1, 2) + np.power(x2, 2))
     return np.sin(s) / s
 
-def func2(x1, x2, x3):
-
-    y1 = np.sin(x1) + np.cos(x2)
-    y2 = np.sin(x2) - np.cos(x3)
-
-    y = np.array([y1.item(), y2.item()])
-    
-    return y.reshape(-1, 1)
 
 if __name__ == '__main__':
     
@@ -269,8 +245,6 @@ if __name__ == '__main__':
     learning_y_list = []
     for x_t in learning_x_list:
         learning_y_list.append(func(x_t[0], x_t[1]))
-    # for x_t in learning_x_list:
-    #     learning_y_list.append(func2(x_t[0], x_t[1], x_t[2]))
         
     # Training NGnet
     previous_likelihood = -10 ** 6
@@ -282,6 +256,8 @@ if __name__ == '__main__':
         print(next_likelihood)
         if previous_likelihood >= next_likelihood:
             print('Warning: Next likelihood is smaller than previous.')
+
+    
     
     # Inference the output y
     inference_x_list = []
@@ -290,7 +266,6 @@ if __name__ == '__main__':
     inference_y_list = []
     for x_t in inference_x_list:
         inference_y_list.append(ngnet.get_output_y(x_t))
-    pdb.set_trace()
 
     # Plot graph
     x1_list = []

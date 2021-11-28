@@ -399,7 +399,8 @@ class NGnet_OEM:
     def update_Sigma_inv(self):
         
         for i in range(self.M):
-            self.Sigma_inv[i] = self.Lambda[i][0:self.N, 0:self.N] * self.one[i]
+            lambda_tmp = self.Lambda[i] * self.one[i]
+            self.Sigma_inv[i] = lambda_tmp[0:self.N, 0:self.N] * self.one[i]
         
 
     # This function updates W according to equation (4.8)
