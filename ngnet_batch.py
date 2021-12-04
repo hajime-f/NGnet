@@ -4,7 +4,7 @@ import numpy as np
 import numpy.linalg as LA
 import math, random, pdb
 
-class NGnet:
+class NGnet_batch:
     
     mu = []     # Center vectors of N-dimensional Gaussian functions
     Sigma = []  # Covariance matrices of N-dimensional Gaussian functions
@@ -18,6 +18,9 @@ class NGnet:
     M = 0       # Number of units
     
     T = 0       # Number of learning data
+
+    Nlog2pi = 0  # N * log(2 * pi)
+    Dlog2pi = 0  # D * log(2 * pi)
     
     def __init__(self, N, D, M, T):
 
@@ -35,13 +38,16 @@ class NGnet:
 
         for i in range(M):
             self.var.append(1)
-    
+
         self.N = N
         self.D = D
         self.M = M
         
         self.T = T
         
+        Nlog2pi = N * np.log(2 * np.pi)
+        Dlog2pi = D * np.log(2 * np.pi)
+            
 
     ### The functions written below are to calculate the output y given the input x
         
@@ -82,13 +88,16 @@ class NGnet:
 
         cov_alpha = cov + np.diag([0.00001 for i in range(self.N)])
         
-        Nlog2pi = self.N * np.log(2 * np.pi)
+        # Nlog2pi = self.N * np.log(2 * np.pi)
+
+        
+        
         logdet = np.log(LA.det(cov_alpha))
         covinv = LA.inv(cov_alpha)
         
         diff = x - mean
 
-        logpdf = -0.5 * (Nlog2pi + logdet + (diff.T @ covinv @ diff))
+        logpdf = -0.5 * (self.Nlog2pi + logdet + (diff.T @ covinv @ diff))
 
         return np.exp(logpdf)
 
@@ -144,9 +153,7 @@ class NGnet:
         
         # Equation (2.3c)
         diff = y.reshape(-1, 1) - self.linear_regression(x, i)
-        tmp = self.norm_pdf(diff, self.var[i])
-        if np.size(tmp) > 1:
-            pdb.set_trace()
+        # tmp = self.norm_pdf(diff, self.var[i])
         P_y = self.norm_pdf(diff, self.var[i]).item()
         
         # Equation (2.2)
@@ -158,7 +165,10 @@ class NGnet:
     # This function calculates normal function according to equation (2.3c)
     def norm_pdf(self, diff, var):
         
-        log_pdf1 = - self.D/2 * np.log(2 * np.pi)
+        # log_pdf1 = - self.D/2 * np.log(2 * np.pi)
+        
+        log_pdf1 = - self.Dlog2pi / 2
+        
         log_pdf2 = - self.D/2 * np.log(var)
         log_pdf3 = - (1/(2 * var)) * (diff.T @ diff)
         return np.exp(log_pdf1 + log_pdf2 + log_pdf3)
@@ -260,7 +270,7 @@ if __name__ == '__main__':
     learning_T = 1000
     inference_T = 1000
     
-    ngnet = NGnet(N, D, M, learning_T)
+    ngnet = NGnet_batch(N, D, M, learning_T)
     
     # Preparing for learning data
     learning_x_list = []
@@ -290,7 +300,6 @@ if __name__ == '__main__':
     inference_y_list = []
     for x_t in inference_x_list:
         inference_y_list.append(ngnet.get_output_y(x_t))
-    pdb.set_trace()
 
     # Plot graph
     x1_list = []

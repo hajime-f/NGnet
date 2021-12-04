@@ -39,6 +39,7 @@ class NGnet_OEM:
 
     posterior_i = []   # Posterior probability that the i-th unit is selected for each observation
 
+    
     def __init__(self, N, D, M, lam=0.998, alpha=0.1):
 
         self.mu = [2 * np.random.rand(N, 1) - 1 for i in range(M)]

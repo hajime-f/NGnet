@@ -267,7 +267,7 @@ if __name__ == '__main__':
 
     N = 2
     D = 1
-    M = 20
+    M = 15
     learning_T = 1000
     inference_T = 1000
     
