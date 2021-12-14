@@ -285,7 +285,7 @@ if __name__ == '__main__':
     # Training NGnet
     previous_likelihood = -10 ** 6
     next_likelihood = -10 ** 5
-    while abs(next_likelihood - previous_likelihood) > 5:
+    while abs(next_likelihood - previous_likelihood) > 1:
         ngnet.batch_learning(learning_x_list, learning_y_list)
         previous_likelihood = next_likelihood
         next_likelihood = ngnet.calc_log_likelihood(learning_x_list, learning_y_list)

@@ -23,8 +23,10 @@ class NGnet_OEM:
 
     one = []
     x = []
-    y2 = []
-    xy = []
+    diff = []
+    yx = []
+    xx = []
+    xx_tilde = []
     
     eta = 0.5
     lam = 0
@@ -52,9 +54,11 @@ class NGnet_OEM:
         self.eta = 0.5 / (0.5 + lam)
 
         self.one = [np.array(1) for i in range(M)]
-        self.x = [np.zeros((N, 1)) for i in range(M)]
-        self.y2 = [np.array(1.0) for i in range(M)]
-        self.xy = [np.ones((N+1, D)) for i in range(M)]
+        self.x = [np.zeros([N, 1]) for i in range(M)]
+        self.diff = [np.array(1) for i in range(M)]
+        self.yx = [np.zeros([D, N + 1]) for i in range(M)]
+        self.xx = [np.zeros([N, N]) for i in range(M)]
+        self.xx_tilde = [np.zeros([N + 1, N + 1]) for i in range(M)]
         
         self.N = N
         self.D = D
@@ -327,7 +331,7 @@ class NGnet_OEM:
 
     # This function calculates multivariate Gaussian G(x) according to equation (2.1c)
     def online_multinorm_pdf(self, x, mean, covinv):
-
+        
         logdet = np.log(LA.det(covinv))
         diff = x - mean
 
@@ -338,27 +342,35 @@ class NGnet_OEM:
 
     def online_M_step(self, x_t, y_t):
 
-        pdb.set_trace()
+        # pdb.set_trace()
         
         self.update_weighted_mean(x_t, y_t)
-        self.online_mu_update()
         self.online_Lambda_update(x_t)
         self.online_Sigma_inv_update()
+        self.online_mu_update()
+        self.online_W_update(x_t, y_t)
+        self.online_var_update()
 
 
     # This function updates weighted means according to equation (4.2)
     def update_weighted_mean(self, x_t, y_t):
 
         # self.eta = self.eta / (self.eta + self.lam)
-        self.eta = 0.9
+        self.eta = 0.1
         
         x_tilde = self.generate_x_tilde(x_t)
 
         for i in range(self.M):
+            
             self.one[i] = self.one[i] + self.eta * (self.posterior_i[i] - self.one[i])   # scalar <<1>>
             self.x[i] = self.x[i] + self.eta * (x_t * self.posterior_i[i] - self.x[i])   # (N x 1)-dimensional vector <<x>>
-            self.y2[i] = self.y2[i] + self.eta * (y_t.T @ y_t * self.posterior_i[i] - self.y2[i])  # scalar <<y^2>>
-            self.xy[i] = self.xy[i] + self.eta * (x_tilde @ y_t.T * self.posterior_i[i] - self.xy[i])  # ((N+1) x D)-dimensional matrix <<xy>>
+
+            self.xx[i] = self.xx[i] + self.eta * (x_t @ x_t.T * self.posterior_i[i] - self.xx[i])
+            self.yx[i] = self.yx[i] + self.eta * (y_t @ x_tilde.T * self.posterior_i[i] - self.yx[i])
+            self.xx_tilde[i] = self.xx_tilde[i] + self.eta * (x_tilde @ x_tilde.T * self.posterior_i[i] - self.xx_tilde[i])
+            
+            diff = y_t - self.linear_regression(x_t, i)
+            self.diff[i] = self.diff[i] + self.eta * (diff.T @ diff * self.posterior_i[i] - self.diff[i])
 
 
     # This function updates mu according to equation (4.5a)
@@ -389,10 +401,32 @@ class NGnet_OEM:
         for i in range(self.M):
             lambda_tmp = self.Lambda[i] * self.one[i]
             self.Sigma_inv[i] = lambda_tmp[0:self.N, 0:self.N]
+
+        # alpha_I = np.diag([0.00001 for _ in range(self.N)])
+        # for i in range(self.M):
+        #     self.Sigma_inv[i] = LA.inv(self.xx[i] / self.one[i] - self.mu[i] @ self.mu[i].T + alpha_I)
             
 
+    # This function updates W according to equation (4.8)
+    def online_W_update(self, x_t, y_t):
 
+        x_tilde = self.generate_x_tilde(x_t)
+        
+        # for i in range(self.M):
+        #     diff = y_t - self.linear_regression(x_t, i)
+        #     self.W[i] = self.W[i] + self.eta * self.posterior_i[i] * (diff @ x_tilde.T @ self.Lambda[i])
 
+        alpha_I = np.diag([0.00001 for _ in range(self.N + 1)])
+        for i in range(self.M):
+            # self.W[i] = self.yx[i] @ LA.inv(self.xx_tilde[i] + alpha_I)
+            self.W[i] = self.yx[i] @ self.Lambda[i]
+        
+            
+    # This function updates variance according to equation (4.5d)
+    def online_var_update(self):
+
+        for i in range(self.M):
+            self.var[i] = (1 / self.D) * self.diff[i] / self.one[i]
     
     
 def func(x1, x2):
@@ -422,7 +456,7 @@ if __name__ == '__main__':
     # Preparing for learning data
     learning_x_list = [20 * np.random.rand(N, 1) - 10 for _ in range(learning_T)]
     learning_y_list = [func(x_t[0], x_t[1]) for x_t in learning_x_list]
-    # learning_y_list = [func(x_t[0], x_t[1], x_t[2]) for x_t in learning_x_list]
+    # learning_y_list = [func2(x_t[0], x_t[1], x_t[2]) for x_t in learning_x_list]
     
     # Training NGnet
     previous_likelihood = -10 ** 6
@@ -440,13 +474,12 @@ if __name__ == '__main__':
     # Preparing for learning data
     learning_x_list = [20 * np.random.rand(N, 1) - 10 for _ in range(learning_T)]
     learning_y_list = [func(x_t[0], x_t[1]) for x_t in learning_x_list]
+    # learning_y_list = [func2(x_t[0], x_t[1], x_t[2]) for x_t in learning_x_list]
     
     # Online training NGnet
     for x_t, y_t in zip(learning_x_list, learning_y_list):
         ngnet.online_learning(x_t, y_t)
         
-    pdb.set_trace()
-    
     # Inference the output y
     inference_x_list = []
     for t in range(inference_T):
