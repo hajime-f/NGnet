@@ -346,6 +346,7 @@ class NGnet_OEM:
         
         self.update_weighted_mean(x_t, y_t)
         self.online_Lambda_update(x_t)
+        # self.regularization()
         self.online_Sigma_inv_update()
         self.online_mu_update()
         self.online_W_update(x_t, y_t)
@@ -395,6 +396,22 @@ class NGnet_OEM:
             self.Lambda[i] = (1 / (1 - self.eta)) * (self.Lambda[i] - numerator / denominator)
 
 
+    # This function regularizes Lambda according to equation (5.12)
+    def regularization(self):
+
+        tmp = [self.alpha for j in range(self.N)]
+        tmp.append(1)
+        nu = np.array(tmp).reshape(-1, 1)
+        
+        for i in range(self.M):
+
+            t1 = self.Lambda[i] @ nu
+            t2 = nu.T @ self.Lambda[i]
+            t3 = self.eta * self.posterior_i[i]
+            k = t3 / (1 + t3 * t2 @ nu)
+            self.Lambda[i] = self.Lambda[i] - k * t1 @ t2
+
+            
     # This function picks up the inverse of Sigma from Lambda according to equation (4.7)
     def online_Sigma_inv_update(self):
         
